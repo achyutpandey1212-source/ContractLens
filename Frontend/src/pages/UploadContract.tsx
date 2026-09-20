@@ -110,10 +110,17 @@ export const UploadContract: React.FC = () => {
         setContractId(err.failureData.contractId);
         setError(null);
       } else {
-        setStatus('idle');
-        setError(
-          err instanceof Error ? err.message : 'Contract analysis failed. Please try again.'
-        );
+        const errorMsg = err instanceof Error ? err.message : 'Contract analysis failed. Please try again.';
+        setStatus('failed');
+        setFailureInfo({
+          success: false,
+          analysisStatus: 'failed',
+          failedAgent: 'AI Analysis',
+          resumeFrom: 'clause',
+          contractId: contractId || 'temp_' + Date.now(),
+          error: errorMsg
+        });
+        setError(null);
       }
     }
   };
@@ -121,8 +128,12 @@ export const UploadContract: React.FC = () => {
   /* ── Retry ──────────────────────────────────────── */
   const handleRetry = async () => {
     const targetId  = contractId ?? failureInfo?.contractId;
-    const failedStage = failureInfo?.resumeFrom ?? 'summary';
-    if (!targetId) return;
+    const failedStage = failureInfo?.resumeFrom ?? 'clause';
+    if (!targetId) {
+      // If no ID yet, re-run full analysis
+      handleAnalyze();
+      return;
+    }
 
     setError(null);
     setStatus('retrying');
@@ -138,10 +149,16 @@ export const UploadContract: React.FC = () => {
         setStatus('failed');
         setFailureInfo(err.failureData);
       } else {
+        const errorMsg = err instanceof Error ? err.message : 'Contract retry failed. Please try again.';
         setStatus('failed');
-        setError(
-          err instanceof Error ? err.message : 'Contract retry failed. Please try again.'
-        );
+        setFailureInfo((prev) => ({
+          success: false,
+          analysisStatus: 'failed',
+          failedAgent: prev?.failedAgent || 'AI Analysis',
+          resumeFrom: prev?.resumeFrom || failedStage,
+          contractId: targetId,
+          error: errorMsg
+        }));
       }
     }
   };

@@ -234,15 +234,20 @@ export const analyzeContract = async (req: Request, res: Response): Promise<void
         timeout: 300000 // 5 minutes timeout for AI processing
       });
     } catch (axiosErr: any) {
-      // Check if n8n returned a structured recoverable error (e.g., HTTP 422 with failed: true)
+      // Check if n8n returned a structured recoverable error or any failure
       const errData = axiosErr.response?.data;
-      if (errData && (errData.failed || errData.stage)) {
-        const n8nContractId = errData.contractId;
-        const failedAgent = errData.failedAgent || 'AI Agent';
-        const resumeFrom = errData.stage || errData.resumeFrom || 'summary';
-        const errorMessage = errData.error || 'The AI service temporarily ran into a problem.';
+      const n8nContractId = errData?.contractId || ('contract_' + Date.now());
+      const failedAgent = errData?.failedAgent || 'AI Agent';
+      const resumeFrom = errData?.stage || errData?.resumeFrom || 'clause';
+      let errorMessage = errData?.error || errData?.message || axiosErr.message || 'The AI service temporarily ran into a problem.';
+      if (typeof errorMessage === 'string' && (errorMessage.includes('503') || errorMessage.includes('high demand'))) {
+        errorMessage = 'The AI model is currently experiencing high demand. Please click Try Again in a few moments.';
+      } else if (typeof errorMessage === 'string' && (errorMessage.includes('rate limit') || errorMessage.includes('429'))) {
+        errorMessage = 'AI rate limit reached. Please click Try Again to resume.';
+      }
 
-        // Create pending Contract record so user can retry
+      // Create pending Contract record so user can retry directly from the UI
+      try {
         const pendingDoc = new Contract({
           name: req.file.originalname.replace(/\.pdf$/i, ''),
           originalFileName: req.file.originalname,
@@ -263,8 +268,19 @@ export const analyzeContract = async (req: Request, res: Response): Promise<void
           error: errorMessage
         });
         return;
+      } catch (dbErr) {
+        console.error('[Save Pending Contract DB Error]', dbErr);
+        res.status(422).json({
+          success: false,
+          analysisStatus: 'failed',
+          failedAgent,
+          resumeFrom,
+          contractId: 'temp_' + Date.now(),
+          n8nContractId,
+          error: errorMessage
+        });
+        return;
       }
-      throw axiosErr;
     }
 
     const analysis = response.data;
@@ -373,28 +389,30 @@ export const retryContract = async (req: Request, res: Response): Promise<void> 
       );
     } catch (axiosErr: any) {
       const errData = axiosErr.response?.data;
-      if (errData && (errData.failed || errData.stage)) {
-        const failedAgent = errData.failedAgent || 'AI Agent';
-        const newResumeFrom = errData.stage || errData.resumeFrom || resumeFrom;
-        const errorMessage = errData.error || 'The AI service temporarily ran into a problem.';
-
-        contract.failedAgent = failedAgent;
-        contract.resumeFrom = newResumeFrom;
-        contract.status = 'failed';
-        await contract.save();
-
-        res.status(422).json({
-          success: false,
-          analysisStatus: 'failed',
-          failedAgent,
-          resumeFrom: newResumeFrom,
-          contractId: contract._id.toString(),
-          n8nContractId,
-          error: errorMessage
-        });
-        return;
+      const failedAgent = errData?.failedAgent || 'AI Agent';
+      const newResumeFrom = errData?.stage || errData?.resumeFrom || resumeFrom;
+      let errorMessage = errData?.error || errData?.message || axiosErr.message || 'The AI service temporarily ran into a problem.';
+      if (typeof errorMessage === 'string' && (errorMessage.includes('503') || errorMessage.includes('high demand'))) {
+        errorMessage = 'The AI model is currently experiencing high demand. Please click Try Again in a few moments.';
+      } else if (typeof errorMessage === 'string' && (errorMessage.includes('rate limit') || errorMessage.includes('429'))) {
+        errorMessage = 'AI rate limit reached. Please click Try Again to resume.';
       }
-      throw axiosErr;
+
+      contract.failedAgent = failedAgent;
+      contract.resumeFrom = newResumeFrom;
+      contract.status = 'failed';
+      await contract.save();
+
+      res.status(422).json({
+        success: false,
+        analysisStatus: 'failed',
+        failedAgent,
+        resumeFrom: newResumeFrom,
+        contractId: contract._id.toString(),
+        n8nContractId,
+        error: errorMessage
+      });
+      return;
     }
 
     const analysis = response.data;
