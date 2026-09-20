@@ -1,7 +1,9 @@
-﻿import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import healthRoutes from './routes/health.routes.js';
 import contractRoutes from './routes/contract.routes.js';
+import authRoutes from './routes/auth.routes.js';
 
 const app: Express = express();
 
@@ -23,9 +25,11 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Routes
 app.use('/api', healthRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/contracts', contractRoutes);
 
 // 404 Handler

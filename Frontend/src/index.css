@@ -17,6 +17,10 @@
   font-display: swap;
 }
 
+@theme {
+  --font-lausanne: 'Lausanne', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
 /* ── CSS Custom Properties ─────────────────────────── */
 :root {
   --accent: #D3FD50;

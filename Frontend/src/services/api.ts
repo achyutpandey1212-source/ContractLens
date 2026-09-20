@@ -1,5 +1,17 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  createdAt?: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user: AuthUser;
+  token?: string;
+}
+
 export interface ContractListItem {
   id: string;
   name: string;
@@ -120,6 +132,62 @@ export const api = {
 
     if (!res.ok || !data.success) {
       throw new AnalysisError(data.error || 'Contract retry failed. Please try again.');
+    }
+    return data;
+  },
+
+  async register(email: string, password: string, confirmPassword?: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password, confirmPassword })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Registration failed');
+    }
+    return data;
+  },
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Login failed');
+    }
+    return data;
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch {
+      // Ignore network errors on logout
+    }
+  },
+
+  async getMe(token?: string | null): Promise<{ user: AuthUser }> {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      method: 'GET',
+      headers,
+      credentials: 'include'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Session expired');
     }
     return data;
   }

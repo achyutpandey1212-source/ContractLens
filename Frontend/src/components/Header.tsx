@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const Header: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isActive = (path: string) =>
-    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+  const isActive = (path: string) => location.pathname.startsWith(path);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   return (
     <header className="border-b border-black bg-white sticky top-0 z-50">
@@ -15,7 +22,7 @@ export const Header: React.FC = () => {
 
         {/* Logotype */}
         <Link
-          to="/"
+          to="/dashboard"
           className="text-black text-xs font-medium tracking-[0.25em] uppercase hover:text-black shrink-0"
         >
           CONTRACTLENS
@@ -24,9 +31,9 @@ export const Header: React.FC = () => {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-7 flex-1">
           <Link
-            to="/"
+            to="/dashboard"
             className={`text-[11px] tracking-[0.18em] uppercase transition-colors pb-0.5 ${
-              isActive('/')
+              isActive('/dashboard')
                 ? 'text-black border-b border-black'
                 : 'text-neutral-500 hover:text-black'
             }`}
@@ -45,14 +52,22 @@ export const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Desktop CTA */}
-        <Link
-          to="/upload"
-          className="hidden md:inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] uppercase px-4 py-2 bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors shrink-0"
-        >
-          <span>+</span>
-          <span>ANALYZE</span>
-        </Link>
+        {/* Desktop Actions */}
+        <div className="hidden md:flex items-center gap-5 shrink-0">
+          <Link
+            to="/upload"
+            className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] uppercase px-4 py-2 bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors shrink-0"
+          >
+            <span>+</span>
+            <span>ANALYZE</span>
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="text-[11px] tracking-[0.18em] uppercase text-neutral-500 hover:text-black transition-colors cursor-pointer"
+          >
+            LOG OUT
+          </button>
+        </div>
 
         {/* Mobile Toggle */}
         <button
@@ -68,9 +83,9 @@ export const Header: React.FC = () => {
       {menuOpen && (
         <div className="md:hidden border-t border-black bg-white">
           {[
-            { to: '/', label: 'DASHBOARD' },
+            { to: '/dashboard', label: 'DASHBOARD' },
             { to: '/upload', label: 'UPLOAD CONTRACT' },
-          ].map(link => (
+          ].map((link) => (
             <Link
               key={link.to}
               to={link.to}
@@ -80,6 +95,15 @@ export const Header: React.FC = () => {
               {link.label}
             </Link>
           ))}
+          <button
+            onClick={() => {
+              setMenuOpen(false);
+              handleLogout();
+            }}
+            className="w-full text-left px-6 py-4 text-[11px] tracking-[0.18em] uppercase border-b border-neutral-100 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
+          >
+            LOG OUT
+          </button>
         </div>
       )}
     </header>

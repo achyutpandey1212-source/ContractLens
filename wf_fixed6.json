@@ -1,0 +1,1980 @@
+[
+  {
+    "updatedAt": "2026-09-20T04:27:22.000Z",
+    "createdAt": "2026-09-19T08:52:24.631Z",
+    "id": "YzO4pksRLgheWGUL",
+    "name": "Analyze contract PDFs and score risk with Claude 3.5, Postgres, email and Slack alerts 2",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "contract-upload",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "1bedb5f1-de65-490d-bea0-2f926f50a7c8",
+        "name": "Contract Upload Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "position": [
+          384,
+          384
+        ],
+        "webhookId": "44327f98-33c2-4e75-b8e5-200d1f337a2c",
+        "typeVersion": 2.1
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "id-1",
+                "name": "riskThreshold",
+                "type": "number",
+                "value": 0.7
+              },
+              {
+                "id": "id-2",
+                "name": "alertRecipients",
+                "type": "string",
+                "value": "<__PLACEHOLDER_VALUE__Email addresses for high-risk alerts__>"
+              },
+              {
+                "id": "id-3",
+                "name": "slackChannel",
+                "type": "string",
+                "value": "<__PLACEHOLDER_VALUE__Slack channel ID for alerts__>"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "804bbbc4-2fa3-4e9c-9032-d20f321813d1",
+        "name": "Workflow Configuration",
+        "type": "n8n-nodes-base.set",
+        "position": [
+          624,
+          384
+        ],
+        "typeVersion": 3.4
+      },
+      {
+        "parameters": {
+          "operation": "pdf",
+          "options": {}
+        },
+        "id": "3fd1b6cb-e8c7-498d-9ea3-970a1b6a588f",
+        "name": "Extract PDF Text",
+        "type": "n8n-nodes-base.extractFromFile",
+        "position": [
+          960,
+          384
+        ],
+        "typeVersion": 1.1
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.text }}",
+          "hasOutputParser": true,
+          "options": {
+            "systemMessage": "You are a legal contract analysis expert specializing in clause extraction.\n\nYour task is to:\n1. Identify and extract ALL contract clauses from the provided text\n2. Categorize each clause by type: payment_terms, termination, liability, ip, confidentiality, warranty, or indemnification\n3. Extract the exact clause text\n4. Provide your confidence level (0-1) for each extraction\n\nReturn a structured array of clauses with: clause_type, clause_text, and ai_confidence fields."
+          }
+        },
+        "id": "4970b244-9446-47d0-9173-b6f80cb09440",
+        "name": "Clause Extraction Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "position": [
+          1392,
+          -304
+        ],
+        "typeVersion": 3,
+        "retryOnFail": true,
+        "waitBetweenTries": 5000,
+        "maxTries": 4,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.text }}",
+          "hasOutputParser": true,
+          "options": {
+            "systemMessage": "You are a legal risk assessment expert specializing in contract analysis.\n\nYour task is to:\n1. Analyze each clause for potential risks\n2. Assign risk levels: critical, high, medium, low, or none\n3. Identify specific risk factors:\n   - Payment terms: Late penalties, disputed amounts, unfavorable terms\n   - Liability: Unlimited liability, indemnification scope\n   - Termination: Lock-in periods, exit difficulty\n   - IP: Ownership ambiguity, broad assignments\n   - Confidentiality: Overly broad NDAs, unreasonable duration\n4. Provide risk descriptions and recommendations\n5. Calculate confidence level (0-1) for each assessment\n\nReturn structured risk analysis with: clause_type, risk_level, risk_description, recommendation, and ai_confidence."
+          }
+        },
+        "id": "b2b72df7-5866-46ac-a720-bb1094b7a7b0",
+        "name": "Risk Assessment Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "position": [
+          1376,
+          240
+        ],
+        "typeVersion": 3,
+        "retryOnFail": true,
+        "waitBetweenTries": 5000,
+        "maxTries": 4,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.text }}",
+          "hasOutputParser": true,
+          "options": {
+            "systemMessage": "You are a legal obligation tracking expert.\n\nYour task is to:\n1. Extract ALL obligations from the contract text\n2. Look for keywords: \"must\", \"shall\", \"required\", \"obligated\", \"agrees to\"\n3. Categorize each obligation: payment, delivery, reporting, or compliance\n4. Extract due dates, deadlines, or timeframes\n5. Identify the responsible party (if specified)\n6. Set initial status as \"pending\"\n\nReturn structured obligations with: obligation_text, obligation_type, due_date (ISO format or null), responsible_party, and status fields.\n\nIMPORTANT OUTPUT REQUIREMENTS:\n\nReturn ONLY the following JSON structure.\n\n{\n  \"obligations\": [\n    {\n      \"obligation_text\": \"string\",\n      \"obligation_type\": \"delivery\",\n      \"due_date\": \"YYYY-MM-DD or null\",\n      \"responsible_party\": \"string or null\",\n      \"status\": \"pending\"\n    }\n  ]\n}\n\nRules:\n- The top-level key MUST be \"obligations\".\n- \"obligations\" MUST be an array.\n- Each array item MUST contain exactly these fields:\n  obligation_text\n  obligation_type\n  due_date\n  responsible_party\n  status\n- obligation_type MUST be one of: \"payment\", \"delivery\", \"reporting\", \"compliance\".\n- Use null when a due date or responsible party cannot be determined.\n- status MUST be \"pending\".\n- Do NOT return markdown.\n- Do NOT wrap the JSON in ```json.\n- Do NOT add any explanation outside the JSON."
+          }
+        },
+        "id": "482d49a0-ddfc-4013-9a6a-57b0c342abe2",
+        "name": "Obligation Extraction Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "position": [
+          1360,
+          672
+        ],
+        "typeVersion": 3,
+        "retryOnFail": true,
+        "waitBetweenTries": 5000,
+        "maxTries": 4,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.text }}",
+          "hasOutputParser": true,
+          "options": {
+            "systemMessage": "You are a legal contract summarization expert.\n\nYour task is to:\n1. Generate a concise executive summary of the contract\n2. Highlight key terms and conditions\n3. Identify the contract parties\n4. Note contract value, dates (execution, expiry)\n5. Summarize major obligations and rights\n6. Flag any unusual or noteworthy provisions\n7. Provide an overall assessment\n\nReturn a structured summary with: contract_name, parties, contract_type, key_terms, major_obligations, notable_provisions, and overall_assessment fields."
+          }
+        },
+        "id": "9d693aa1-48a3-415f-ba71-99cb2462c9bf",
+        "name": "Executive Summary Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "position": [
+          1328,
+          1072
+        ],
+        "typeVersion": 3,
+        "retryOnFail": true,
+        "waitBetweenTries": 5000,
+        "maxTries": 4,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": ""
+          },
+          "options": {}
+        },
+        "id": "83060009-2191-4d6e-976f-23d16dca9932",
+        "name": "Claude 3.5 Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "position": [
+          2432,
+          1264
+        ],
+        "typeVersion": 1.3
+      },
+      {
+        "parameters": {
+          "jsonSchemaExample": "{\n  \"clauses\": [\n    {\n      \"clause_type\": \"payment_terms\",\n      \"clause_text\": \"Payment due within 30 days\",\n      \"ai_confidence\": 0.95\n    }\n  ]\n}"
+        },
+        "id": "2631b1e3-9e6d-4c7a-b299-9e3132d6cbdb",
+        "name": "Clause Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "position": [
+          1584,
+          -112
+        ],
+        "typeVersion": 1.3
+      },
+      {
+        "parameters": {
+          "jsonSchemaExample": "{\n  \"risks\": [\n    {\n      \"clause_type\": \"payment_terms\",\n      \"risk_level\": \"high\",\n      \"risk_description\": \"60-day payment terms exceed industry standard\",\n      \"recommendation\": \"Negotiate to 30-day terms\",\n      \"ai_confidence\": 0.92\n    }\n  ]\n}"
+        },
+        "id": "e89e8d7a-5df6-4544-9b8f-f3b40345c047",
+        "name": "Risk Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "position": [
+          1616,
+          384
+        ],
+        "typeVersion": 1.3
+      },
+      {
+        "parameters": {
+          "jsonSchemaExample": "{\n  \"output\": {\n    \"obligations\": [\n      {\n        \"obligation_text\": \"Vendor shall provide services\",\n        \"obligation_type\": \"delivery\",\n        \"due_date\": null,\n        \"responsible_party\": \"Vendor\",\n        \"status\": \"pending\"\n      }\n    ]\n  }\n}"
+        },
+        "id": "7ed92ab4-629c-4618-b4ef-22ada1aa711b",
+        "name": "Obligation Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "position": [
+          1456,
+          832
+        ],
+        "typeVersion": 1.3
+      },
+      {
+        "parameters": {
+          "jsonSchemaExample": "{\n  \"contract_name\": \"Vendor Services Agreement\",\n  \"parties\": [\"Company A\", \"Vendor B\"],\n  \"contract_type\": \"vendor\",\n  \"execution_date\": \"2024-01-01\",\n  \"expiry_date\": \"2025-01-01\",\n  \"value\": 50000.00,\n  \"key_terms\": \"Monthly service delivery with 30-day payment terms\",\n  \"major_obligations\": \"Vendor provides services, Company pays monthly\",\n  \"notable_provisions\": \"Auto-renewal clause with 60-day notice\",\n  \"overall_assessment\": \"Standard vendor agreement with favorable terms\"\n}"
+        },
+        "id": "a65fa73b-6b31-4c91-bf4f-57a224cd0f3c",
+        "name": "Summary Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "position": [
+          1536,
+          1280
+        ],
+        "typeVersion": 1.3
+      },
+      {
+        "parameters": {
+          "jsCode": "// Read directly from state file - robust against merge/ordering issues\nconst fs = require('fs');\nconst inputs = $input.all();\n\n// Get contractId from any available input\nconst contractId = inputs.map(i => i.json && i.json.contractId).find(Boolean)\n  || ($('Assemble Analysis').first() && $('Assemble Analysis').first().json && $('Assemble Analysis').first().json.contractId);\n\n// Load data from state file (source of truth)\nlet clauseData = [], riskData = [], obligationData = [], summaryData = {};\nif (contractId) {\n  try {\n    const state = JSON.parse(fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8'));\n    clauseData = state.clauses || [];\n    riskData = state.risks || [];\n    obligationData = state.obligations || [];\n    summaryData = state.summary || {};\n  } catch (e) {}\n}\n\n// Fallback to input items if state file empty\nif (!riskData.length) {\n  clauseData = (inputs.find(i => i.json && i.json.output && i.json.output.clauses) || {json:{output:{clauses:[]}}}).json.output.clauses;\n  riskData = (inputs.find(i => i.json && i.json.output && i.json.output.risks) || {json:{output:{risks:[]}}}).json.output.risks;\n  obligationData = (inputs.find(i => i.json && i.json.output && i.json.output.obligations) || {json:{output:{obligations:[]}}}).json.output.obligations;\n  const summaryInput = inputs.find(i => i.json && i.json.output && (i.json.output.contract_name || i.json.output.overall_assessment));\n  summaryData = summaryInput ? summaryInput.json.output : {};\n}\n\n// Risk weights by clause categories\nconst riskWeights = {\n  'Service Level and Support (Clause 3)': 0.16,\n  'Fees and Payment (Clause 4)': 0.08,\n  'Data Protection and Security (Clause 5)': 0.18,\n  'Confidentiality (Clause 6)': 0.05,\n  'Intellectual Property (Clause 7)': 0.08,\n  'Indemnification (Clause 8)': 0.10,\n  'Limitation of Liability (Clause 9)': 0.22,\n  'Term, Renewal and Termination (Clause 10)': 0.10,\n  'Effect of Termination (Clause 11)': 0.02,\n  'General / Governing Law (Clause 12)': 0.01,\n  'Definitions and Interpretation (Clause 1)': 0.00,\n  'Services and Obligations (Clause 2)': 0.00\n};\n\n// Risk level scores\nconst riskScores = {\n  critical: 1.0,\n  high: 0.75,\n  medium: 0.5,\n  low: 0.25,\n  none: 0.0\n};\n\nfunction normalizeRiskType(type) {\n  const value = String(type || '').toLowerCase();\n  if (value.includes('liability')) return 'Limitation of Liability (Clause 9)';\n  if (value.includes('data protection') || value.includes('security')) return 'Data Protection and Security (Clause 5)';\n  if (value.includes('service level') || value.includes('sla') || value.includes('support')) return 'Service Level and Support (Clause 3)';\n  if (value.includes('indemn')) return 'Indemnification (Clause 8)';\n  if (value.includes('payment') || value.includes('fee') || value.includes('compensation')) return 'Fees and Payment (Clause 4)';\n  if (value.includes('effect of termination') || value.includes('data return')) return 'Effect of Termination (Clause 11)';\n  if (value.includes('termination') || value.includes('term') || value.includes('renewal')) return 'Term, Renewal and Termination (Clause 10)';\n  if (value.includes('ip') || value.includes('intellectual property')) return 'Intellectual Property (Clause 7)';\n  if (value.includes('confidential')) return 'Confidentiality (Clause 6)';\n  if (value.includes('governing law') || value.includes('dispute') || value.includes('general')) return 'General / Governing Law (Clause 12)';\n  if (value.includes('service') || value.includes('modification') || value.includes('guarantee') || value.includes('duties') || value.includes('work scope')) return 'Services and Obligations (Clause 2)';\n  return null;\n}\n\n// Calculate weighted risk score\nlet scoreBreakdown = {};\nlet totalWeightedScore = 0;\nlet redFlags = [];\nlet recommendations = [];\n\nriskData.forEach(function(risk) {\n  const matchedKey = riskWeights[risk.clause_type] !== undefined\n    ? risk.clause_type\n    : normalizeRiskType(risk.clause_type);\n  const weight = matchedKey ? (riskWeights[matchedKey] !== undefined ? riskWeights[matchedKey] : 0) : 0;\n  const score = riskScores[(risk.risk_level || '').toLowerCase()] !== undefined ? riskScores[(risk.risk_level || '').toLowerCase()] : 0;\n  const weightedScore = score * weight;\n  scoreBreakdown[(matchedKey || risk.clause_type) + '_risk'] = score;\n  totalWeightedScore += weightedScore;\n\n  if ((risk.risk_level || '').toLowerCase() === 'critical' || (risk.risk_level || '').toLowerCase() === 'high') {\n    redFlags.push(risk.risk_description);\n    recommendations.push(risk.recommendation);\n  }\n});\n\n// Check for missing critical clauses\nconst criticalClauses = ['payment_terms', 'liability', 'termination'];\nconst foundClauses = clauseData.map(function(c) { return c.clause_type; });\ncriticalClauses.forEach(function(critical) {\n  if (!foundClauses.includes(critical)) {\n    redFlags.push('Missing critical clause: ' + critical);\n    recommendations.push('Add ' + critical + ' clause to contract');\n  }\n});\n\n// Check AI confidence levels\nconst allItems = clauseData.concat(riskData);\nconst lowConfidenceItems = allItems.filter(function(item) {\n  return typeof item.ai_confidence === 'number' && item.ai_confidence < 0.6;\n});\nif (lowConfidenceItems.length > 0) {\n  redFlags.push(lowConfidenceItems.length + ' items flagged for manual legal review (low AI confidence)');\n  recommendations.push('Schedule legal review for low-confidence extractions');\n}\n\n// Final risk score\nconst overallRiskScore = Math.min(1.0, Math.round(totalWeightedScore * 100) / 100);\n\nreturn {\n  clauses: clauseData,\n  risks: riskData,\n  obligations: obligationData,\n  summary: summaryData,\n  overall_risk_score: overallRiskScore,\n  score_breakdown: scoreBreakdown,\n  red_flags: redFlags,\n  recommendations: recommendations,\n  calculated_at: new Date().toISOString(),\n  contractId: contractId\n};\n"
+        },
+        "id": "bbafa2e7-13e2-44c2-b97e-7cbe7d32bae9",
+        "name": "Calculate Risk Score",
+        "type": "n8n-nodes-base.code",
+        "position": [
+          2096,
+          384
+        ],
+        "typeVersion": 2
+      },
+      {
+        "parameters": {
+          "numberInputs": 4
+        },
+        "id": "1fece3f3-7743-4da3-91c8-280d795a9938",
+        "name": "Merge Analysis Results",
+        "type": "n8n-nodes-base.merge",
+        "position": [
+          1856,
+          352
+        ],
+        "typeVersion": 3.2
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "id-1",
+                "name": "contract_id",
+                "type": "string",
+                "value": "={{ $now.toISO() }}-{{ $json.summary.contract_name.replace(/\\s+/g, \"-\").toLowerCase() }}"
+              },
+              {
+                "id": "id-2",
+                "name": "contract_name",
+                "type": "string",
+                "value": "={{ $json.summary.contract_name }}"
+              },
+              {
+                "id": "id-3",
+                "name": "contract_type",
+                "type": "string",
+                "value": "={{ $json.summary.contract_type }}"
+              },
+              {
+                "id": "id-4",
+                "name": "execution_date",
+                "type": "string",
+                "value": "={{ $json.summary.execution_date }}"
+              },
+              {
+                "id": "id-5",
+                "name": "expiry_date",
+                "type": "string",
+                "value": "={{ $json.summary.expiry_date }}"
+              },
+              {
+                "id": "id-6",
+                "name": "value",
+                "type": "string",
+                "value": "={{ $json.summary.value }}"
+              },
+              {
+                "id": "id-7",
+                "name": "status",
+                "type": "string",
+                "value": "draft"
+              },
+              {
+                "id": "id-8",
+                "name": "uploaded_by",
+                "type": "string",
+                "value": "<__PLACEHOLDER_VALUE__User ID or email__>"
+              },
+              {
+                "id": "id-9",
+                "name": "upload_date",
+                "type": "string",
+                "value": "={{ $now.toISO() }}"
+              },
+              {
+                "id": "id-10",
+                "name": "document_hash",
+                "type": "number",
+                "value": "={{ $json.summary.contract_name.length }}"
+              },
+              {
+                "id": "id-11",
+                "name": "clauses",
+                "type": "string",
+                "value": "={{ $json.clauses }}"
+              },
+              {
+                "id": "id-12",
+                "name": "risks",
+                "type": "string",
+                "value": "={{ $json.risks }}"
+              },
+              {
+                "id": "id-13",
+                "name": "obligations",
+                "type": "string",
+                "value": "={{ $json.obligations }}"
+              },
+              {
+                "id": "id-14",
+                "name": "overall_risk_score",
+                "type": "number",
+                "value": "={{ $json.overall_risk_score }}"
+              },
+              {
+                "id": "id-15",
+                "name": "score_breakdown",
+                "type": "string",
+                "value": "={{ $json.score_breakdown }}"
+              },
+              {
+                "id": "id-16",
+                "name": "red_flags",
+                "type": "string",
+                "value": "={{ $json.red_flags }}"
+              },
+              {
+                "id": "id-17",
+                "name": "recommendations",
+                "type": "string",
+                "value": "={{ $json.recommendations }}"
+              },
+              {
+                "id": "id-18",
+                "name": "calculated_at",
+                "type": "string",
+                "value": "={{ $json.calculated_at }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "69956926-17f3-425e-be8b-aaeecd551d19",
+        "name": "Prepare Contract Data",
+        "type": "n8n-nodes-base.set",
+        "position": [
+          2288,
+          384
+        ],
+        "typeVersion": 3.4
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list",
+            "cachedResultName": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "contracts",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "contract_name": "={{$json.contract_name}}",
+              "contract_type": "={{$json.contract_type}}",
+              "parties": "={{ {\n  client: $('Calculate Risk Score').item.json.summary.parties[0],\n  vendor: $('Calculate Risk Score').item.json.summary.parties[1]\n} }}",
+              "effective_date": "={{$json.execution_date}}",
+              "expiration_date": "={{$json.expiry_date.split(' ')[0]}}",
+              "summary": "={{ JSON.stringify($json) }}",
+              "created_at": "={{$json.upload_date}}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "contract_name",
+                "displayName": "contract_name",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "contract_type",
+                "displayName": "contract_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "parties",
+                "displayName": "parties",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "object",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "effective_date",
+                "displayName": "effective_date",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "expiration_date",
+                "displayName": "expiration_date",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "renewal_date",
+                "displayName": "renewal_date",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "summary",
+                "displayName": "summary",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "id": "61c5b5fc-568e-4479-91d0-9ea506b153db",
+        "name": "Insert Contract",
+        "type": "n8n-nodes-base.postgres",
+        "position": [
+          2528,
+          384
+        ],
+        "typeVersion": 2.6,
+        "credentials": {
+          "postgres": {
+            "id": "f1iganZPGTDwWSmx",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list",
+            "cachedResultName": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "contract_clauses",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "contract_id": "={{ $json.id }}",
+              "clause_type": "={{ JSON.parse(JSON.parse($json.summary).clauses)[0].clause_type }}",
+              "clause_text": "={{ JSON.parse(JSON.parse($json.summary).clauses)[0].clause_text }}",
+              "risk_level": "=",
+              "analysis": "=",
+              "created_at": "={{ $now }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "contract_id",
+                "displayName": "contract_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "clause_type",
+                "displayName": "clause_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "clause_text",
+                "displayName": "clause_text",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "risk_level",
+                "displayName": "risk_level",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "analysis",
+                "displayName": "analysis",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "id": "671ebaaf-a69b-4e6e-8039-91425bbf9f79",
+        "name": "Insert Clauses",
+        "type": "n8n-nodes-base.postgres",
+        "position": [
+          2800,
+          928
+        ],
+        "typeVersion": 2.6,
+        "credentials": {
+          "postgres": {
+            "id": "f1iganZPGTDwWSmx",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list",
+            "cachedResultName": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "contract_obligations",
+            "mode": "name"
+          },
+          "options": {}
+        },
+        "id": "b8c5ba5f-f1b3-4d84-a168-8df19e38464b",
+        "name": "Insert Obligations",
+        "type": "n8n-nodes-base.postgres",
+        "position": [
+          3024,
+          928
+        ],
+        "typeVersion": 2.6,
+        "credentials": {
+          "postgres": {
+            "id": "f1iganZPGTDwWSmx",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list",
+            "cachedResultName": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "risk_scoring",
+            "mode": "name"
+          },
+          "options": {}
+        },
+        "id": "ef451585-d769-4629-a053-9a8c44f52cb9",
+        "name": "Insert Risk Scoring",
+        "type": "n8n-nodes-base.postgres",
+        "position": [
+          3248,
+          928
+        ],
+        "typeVersion": 2.6,
+        "credentials": {
+          "postgres": {
+            "id": "f1iganZPGTDwWSmx",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "operator": {
+                  "type": "number",
+                  "operation": "gte"
+                },
+                "leftValue": "={{ $json.overall_risk_score }}",
+                "rightValue": 0.7
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "83bd70fa-c70b-4a57-b657-fafecc7b32fd",
+        "name": "Check Risk Level",
+        "type": "n8n-nodes-base.if",
+        "position": [
+          2480,
+          -32
+        ],
+        "typeVersion": 2.3
+      },
+      {
+        "parameters": {
+          "sendTo": "=achyutpandey1212@gmail.com",
+          "subject": "=HIGH RISK CONTRACT ALERT: {{ $json.contract_name }}",
+          "message": "=<h2>High Risk Contract Detected</h2>\n<p><strong>Contract:</strong> {{ $json.contract_name }}</p>\n<p><strong>Risk Score:</strong> {{ $json.overall_risk_score }} (Threshold: 0.7)</p>\n<h3>Red Flags:</h3>\n<ul>{{ $json.red_flags.map(flag => \"<li>\" + flag + \"</li>\").join(\"\") }}</ul>\n<h3>Recommendations:</h3>\n<ul>{{ $json.recommendations.map(rec => \"<li>\" + rec + \"</li>\").join(\"\") }}</ul>\n<p>Please review this contract immediately.</p>",
+          "options": {}
+        },
+        "id": "f0ee12f3-5a87-4d9b-ba36-5af6fef4ab3c",
+        "name": "Send Email Alert",
+        "type": "n8n-nodes-base.gmail",
+        "position": [
+          2944,
+          -624
+        ],
+        "webhookId": "118ded85-2d9e-4cb5-a012-9428d024b53e",
+        "typeVersion": 2.2,
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "mW10J6AqPPiAhu4t",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0C3480TV6D",
+            "mode": "id"
+          },
+          "text": "=⚠️ *HIGH RISK CONTRACT ALERT*\n\n*Contract:* {{ $json.contract_name }}\n*Risk Score:* {{ $json.overall_risk_score }} (Threshold: 0.7)\n\n*Red Flags:*\n{{ $json.red_flags.map((flag, i) => (i+1) + \". \" + flag).join(\"\\n\") }}\n\n*Recommendations:*\n{{ $json.recommendations.map((rec, i) => (i+1) + \". \" + rec).join(\"\\n\") }}\n\nPlease review immediately.",
+          "otherOptions": {}
+        },
+        "id": "0bc821ff-528f-4087-9d51-09bb5a203c67",
+        "name": "Send Slack Alert",
+        "type": "n8n-nodes-base.slack",
+        "position": [
+          2960,
+          -208
+        ],
+        "webhookId": "1254bc11-8603-4612-920e-20951de04c8d",
+        "typeVersion": 2.4,
+        "credentials": {
+          "slackApi": {
+            "id": "mFyAIOJ6STYiptzS",
+            "name": "Slack account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "content": "## Alert System\nemail for high-risk cases",
+          "height": 320,
+          "width": 304,
+          "color": 7
+        },
+        "id": "cd7698c8-0219-4ed5-bb88-8d96e815d3e6",
+        "name": "Sticky Note1",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2848,
+          -720
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Alert System\nSend Slack",
+          "height": 240,
+          "width": 304,
+          "color": 7
+        },
+        "id": "f6a5f945-b9c0-449a-9b86-d577b4c71567",
+        "name": "Sticky Note",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2880,
+          -288
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Risk Evaluation\nCompare score with risk threshold",
+          "height": 384,
+          "width": 294,
+          "color": 7
+        },
+        "id": "d47fd412-07ce-48aa-ba54-e498a8b3a50e",
+        "name": "Sticky Note2",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2416,
+          -160
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Data Storage\nStore contract, clauses, and risk data",
+          "height": 368,
+          "width": 336,
+          "color": 7
+        },
+        "id": "11f44590-eba8-4feb-ad0e-136aea9bca65",
+        "name": "Sticky Note3",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2464,
+          256
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Risk Scoring\nCalculate weighted contract risk score",
+          "height": 320,
+          "width": 368,
+          "color": 7
+        },
+        "id": "105ab5e6-fad8-4b81-817e-4485c03e3a77",
+        "name": "Sticky Note4",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2064,
+          288
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Data Aggregation\nMerge outputs from all AI agents",
+          "height": 336,
+          "width": 304,
+          "color": 7
+        },
+        "id": "fff17866-f91e-4069-bce8-89314f159acc",
+        "name": "Sticky Note5",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1744,
+          272
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Clause Analysis\nIdentify and categorize contract clauses",
+          "height": 416,
+          "width": 480,
+          "color": 7
+        },
+        "id": "af3ae9e1-e476-434c-9be0-01613708802c",
+        "name": "Sticky Note6",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1248,
+          -416
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Risk Analysis\nEvaluate clause risks and recommendations",
+          "height": 432,
+          "width": 464,
+          "color": 7
+        },
+        "id": "3022b2c1-2b30-4e79-b792-b66696229f07",
+        "name": "Sticky Note7",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1248,
+          32
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Obligation Tracking\nExtract duties, deadlines, and responsibilities",
+          "height": 416,
+          "width": 464,
+          "color": 7
+        },
+        "id": "9ba5907c-df59-4474-ad05-4c09ee5ef29e",
+        "name": "Sticky Note8",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1248,
+          512
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## AI Model\nClaude 3.5 language model configuration",
+          "height": 240,
+          "width": 304,
+          "color": 7
+        },
+        "id": "9bdb8efe-bbe8-47e0-8c7d-ab2bc0e7c1e9",
+        "name": "Sticky Note9",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2080,
+          1040
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Executive Summary\nGenerate structured contract overview",
+          "height": 416,
+          "width": 512,
+          "color": 7
+        },
+        "id": "1a58481d-e882-40fa-a2e3-4c7045abd01d",
+        "name": "Sticky Note10",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1232,
+          976
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Text Extraction\nExtract text from uploaded PDF file",
+          "height": 384,
+          "width": 304,
+          "color": 7
+        },
+        "id": "4271a106-22ff-4230-9d45-b31099df0c5c",
+        "name": "Sticky Note11",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          848,
+          240
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## Input Layer\nUpload contract via webhook trigger and \nconfigure risk",
+          "height": 400,
+          "width": 416,
+          "color": 7
+        },
+        "id": "1491ce9a-c12a-490f-a245-e291c39f77ca",
+        "name": "Sticky Note12",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          368,
+          240
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "content": "## How it works\nThis workflow analyzes uploaded contracts using AI to extract clauses, assess risks, track obligations, and generate a structured summary.\n\nAfter a contract is uploaded, the PDF text is extracted and processed by multiple AI agents in parallel. These agents identify clauses, evaluate risks, extract obligations, and generate an executive summary.\n\nThe workflow calculates an overall risk score using weighted logic and flags high-risk contracts. All results are stored in a database, including clauses, obligations, and risk insights.\n\nIf the risk score exceeds the defined threshold, alerts are automatically sent via email and Slack for immediate review.\n\n## Setup steps\n- Configure webhook for contract upload\n- Add AI model credentials (Anthropic/OpenAI)\n- Set Postgres database connection\n- Configure Slack and email alerts\n- Adjust risk threshold and alert settings",
+          "height": 528,
+          "width": 592
+        },
+        "id": "81ad3f21-ab85-4333-b294-616de122217f",
+        "name": "Sticky Note13",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          -720,
+          256
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "modelName": "models/gemini-flash-lite-latest",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1.1,
+        "position": [
+          1424,
+          -1040
+        ],
+        "id": "a80124c8-e08c-43ad-a1ea-c16d2eb34d5a",
+        "name": "Google Gemini Chat Model",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "oo1j2cDWPGzVLmk3",
+            "name": "Google Gemini(PaLM) Api account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "options": {},
+          "responseBody": "={{ $('Calculate Risk Score').first().json }}"
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          3088,
+          64
+        ],
+        "id": "2e0573d1-fe0d-43c9-8287-fea38b6874bc",
+        "name": "Respond to Webhook"
+      },
+      {
+        "parameters": {
+          "model": "mistral-medium",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+        "typeVersion": 1,
+        "position": [
+          2592,
+          1344
+        ],
+        "id": "3b5d43cb-7689-470b-9816-a072defc7351",
+        "name": "Mistral Cloud Chat Model",
+        "credentials": {
+          "mistralCloudApi": {
+            "id": "sO75zUKXTONVnesb",
+            "name": "Mistral Cloud account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "model": "qwen/qwen3.8-27b",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+        "typeVersion": 1,
+        "position": [
+          2192,
+          1168
+        ],
+        "id": "9ebe22bf-9216-4a3a-a977-bef84921d110",
+        "name": "Groq Chat Model",
+        "credentials": {
+          "groqApi": {
+            "id": "IFF2pBxQNA8ztyqe",
+            "name": "Groq account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "model": "qwen/qwen3.8-27b",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+        "typeVersion": 1,
+        "position": [
+          2000,
+          -672
+        ],
+        "id": "83fedba7-317b-43fd-8ea4-b1203ace4c2b",
+        "name": "Groq Chat Model1",
+        "credentials": {
+          "groqApi": {
+            "id": "oPHAZPSjBcdsScam",
+            "name": "Groq account 3"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "content": "## AI Model\nClaude 3.5 language model configuration",
+          "height": 240,
+          "width": 304,
+          "color": 7
+        },
+        "id": "52c66dcd-bc2e-468c-ba85-d6bd8e5c9ed1",
+        "name": "Sticky Note14",
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          1888,
+          -784
+        ],
+        "typeVersion": 1
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "contract-resume",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "contract-resume-webhook-id",
+        "name": "Contract Resume Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          384,
+          1500
+        ],
+        "webhookId": "44327f98-resume-unique-id"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst fs = require('fs');\nconst body = $json.body || $json;\nconst contractId = body.contractId;\nconst resumeFrom = (body.resumeFrom || 'clause').toLowerCase();\n\nlet state = {};\ntry {\n  const raw = fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8');\n  state = JSON.parse(raw);\n} catch (e) {\n  throw new Error('State not found for contractId: ' + contractId);\n}\n\nreturn [{\n  json: {\n    contractId,\n    resumeFrom,\n    text: state.text || '',\n    clauses: state.clauses || null,\n    risks: state.risks || null,\n    obligations: state.obligations || null,\n    summary: state.summary || null\n  }\n}];\n"
+        },
+        "id": "load-state-code-id",
+        "name": "Load State",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          624,
+          1500
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst fs = require('fs');\nconst headerId = $('Contract Upload Webhook').first()?.json?.headers?.['x-contract-id'] || \n                 $('Contract Upload Webhook').first()?.json?.query?.contractId;\nconst contractId = headerId || ('contract_' + Date.now());\n\ntry { fs.mkdirSync('/tmp/contractlens_state', { recursive: true }); } catch (e) {}\n\nconst text = $json.text || '';\nconst state = {\n  contractId,\n  text,\n  clauses: null,\n  risks: null,\n  obligations: null,\n  summary: null,\n  updatedAt: new Date().toISOString()\n};\n\nfs.writeFileSync('/tmp/contractlens_state/' + contractId + '.json', JSON.stringify(state));\n\nreturn [{\n  json: {\n    ...$json,\n    contractId,\n    resumeFrom: 'clause',\n    text\n  }\n}];\n"
+        },
+        "id": "init-state-code-id",
+        "name": "Init State",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $json;\nconst fs = require('fs');\n\nconst contractId = item.contractId;\nconst resumeFrom = (item.resumeFrom || 'clause').toLowerCase();\n\n// Always load text from state file\nlet text = item.text || '';\nlet saved = null;\nif (contractId) {\n  try {\n    const raw = fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8');\n    const state = JSON.parse(raw);\n    if (state.text) text = state.text;\n    if (state.clauses && resumeFrom !== 'clause') {\n      saved = state.clauses;\n    }\n  } catch (e) {}\n}\n\nif (saved) {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      output: { clauses: saved },\n      clauses: saved,\n      reused: true,\n      shouldReuse: true\n    }\n  }];\n} else {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      shouldReuse: false\n    }\n  }];\n}\n"
+        },
+        "id": "check-clause-code-id",
+        "name": "Check Clause",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1280,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst item = $json;\n\nlet prevItem = {};\ntry { prevItem = $('Check Clause').first().json || {}; } catch(e) {}\n\nconst contractId = item.contractId || prevItem.contractId;\nconst resumeFrom = item.resumeFrom || prevItem.resumeFrom || 'clause';\nconst text = item.text || prevItem.text || '';\n\nif (item.failed) {\n  return [{ json: item }];\n}\n\nif (item.error) {\n  return [{\n    json: {\n      success: false,\n      failed: true,\n      failedAgent: 'Clause Extraction Agent',\n      stage: 'clause',\n      contractId,\n      resumeFrom,\n      error: item.error.message || String(item.error)\n    }\n  }];\n}\n\nlet data = item.output?.clauses || item.clauses;\nif (!data && typeof item.output === 'string') {\n  try {\n    const parsed = JSON.parse(item.output);\n    data = parsed.clauses;\n  } catch(e) {}\n}\nif (!data && item.text && item.text.includes('\"clauses\"')) {\n  try {\n    const parsed = JSON.parse(item.text);\n    data = parsed.clauses;\n  } catch(e) {}\n}\n\nif (contractId && data) {\n  try {\n    const p = '/tmp/contractlens_state/' + contractId + '.json';\n    const state = JSON.parse(fs.readFileSync(p, 'utf8'));\n    state.clauses = data;\n    state.updatedAt = new Date().toISOString();\n    fs.writeFileSync(p, JSON.stringify(state));\n  } catch(e) {}\n}\n\nreturn [{\n  json: {\n    contractId,\n    resumeFrom,\n    text,\n    clauses: data || [],\n    output: { clauses: data || [] }\n  }\n}];"
+        },
+        "id": "save-clause-code-id",
+        "name": "Save Clause",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $json;\nif (item.failed) return [{ json: item }];\n\nconst fs = require('fs');\n\nconst contractId = item.contractId;\nconst resumeFrom = (item.resumeFrom || 'clause').toLowerCase();\n\n// Always load text from state file\nlet text = item.text || '';\nlet saved = null;\nif (contractId) {\n  try {\n    const raw = fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8');\n    const state = JSON.parse(raw);\n    if (state.text) text = state.text;\n    const order = ['clause', 'risk', 'obligation', 'summary'];\n    if (state.risks && order.indexOf(resumeFrom) > order.indexOf('risk')) {\n      saved = state.risks;\n    }\n  } catch (e) {}\n}\n\nif (saved) {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      output: { risks: saved },\n      risks: saved,\n      reused: true,\n      shouldReuse: true\n    }\n  }];\n} else {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      shouldReuse: false\n    }\n  }];\n}\n"
+        },
+        "id": "check-risk-code-id",
+        "name": "Check Risk",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1840,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst item = $json;\n\nlet prevItem = {};\ntry { prevItem = $('Check Risk').first().json || {}; } catch(e) {}\n\nconst contractId = item.contractId || prevItem.contractId;\nconst resumeFrom = item.resumeFrom || prevItem.resumeFrom || 'clause';\nconst text = item.text || prevItem.text || '';\n\nif (item.failed) {\n  return [{ json: item }];\n}\n\nif (item.error) {\n  return [{\n    json: {\n      success: false,\n      failed: true,\n      failedAgent: 'Risk Assessment Agent',\n      stage: 'risk',\n      contractId,\n      resumeFrom,\n      error: item.error.message || String(item.error)\n    }\n  }];\n}\n\nlet data = item.output?.risks || item.risks;\nif (!data && typeof item.output === 'string') {\n  try {\n    const parsed = JSON.parse(item.output);\n    data = parsed.risks;\n  } catch(e) {}\n}\nif (!data && item.text && item.text.includes('\"risks\"')) {\n  try {\n    const parsed = JSON.parse(item.text);\n    data = parsed.risks;\n  } catch(e) {}\n}\n\nif (contractId && data) {\n  try {\n    const p = '/tmp/contractlens_state/' + contractId + '.json';\n    const state = JSON.parse(fs.readFileSync(p, 'utf8'));\n    state.risks = data;\n    state.updatedAt = new Date().toISOString();\n    fs.writeFileSync(p, JSON.stringify(state));\n  } catch(e) {}\n}\n\nreturn [{\n  json: {\n    contractId,\n    resumeFrom,\n    text,\n    risks: data || [],\n    output: { risks: data || [] }\n  }\n}];"
+        },
+        "id": "save-risk-code-id",
+        "name": "Save Risk",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2240,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $json;\nif (item.failed) return [{ json: item }];\n\nconst fs = require('fs');\n\nconst contractId = item.contractId;\nconst resumeFrom = (item.resumeFrom || 'clause').toLowerCase();\n\n// Always load text from state file\nlet text = item.text || '';\nlet saved = null;\nif (contractId) {\n  try {\n    const raw = fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8');\n    const state = JSON.parse(raw);\n    if (state.text) text = state.text;\n    const order = ['clause', 'risk', 'obligation', 'summary'];\n    if (state.obligations && order.indexOf(resumeFrom) > order.indexOf('obligation')) {\n      saved = state.obligations;\n    }\n  } catch (e) {}\n}\n\nif (saved) {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      output: { obligations: saved },\n      obligations: saved,\n      reused: true,\n      shouldReuse: true\n    }\n  }];\n} else {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      shouldReuse: false\n    }\n  }];\n}\n"
+        },
+        "id": "check-obligation-code-id",
+        "name": "Check Obligation",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2400,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst item = $json;\n\nlet prevItem = {};\ntry { prevItem = $('Check Obligation').first().json || {}; } catch(e) {}\n\nconst contractId = item.contractId || prevItem.contractId;\nconst resumeFrom = item.resumeFrom || prevItem.resumeFrom || 'clause';\nconst text = item.text || prevItem.text || '';\n\nif (item.failed) {\n  return [{ json: item }];\n}\n\nif (item.error) {\n  return [{\n    json: {\n      success: false,\n      failed: true,\n      failedAgent: 'Obligation Extraction Agent',\n      stage: 'obligation',\n      contractId,\n      resumeFrom,\n      error: item.error.message || String(item.error)\n    }\n  }];\n}\n\nlet data = item.output?.obligations || item.obligations;\nif (!data && typeof item.output === 'string') {\n  try {\n    const parsed = JSON.parse(item.output);\n    data = parsed.obligations;\n  } catch(e) {}\n}\nif (!data && item.text && item.text.includes('\"obligations\"')) {\n  try {\n    const parsed = JSON.parse(item.text);\n    data = parsed.obligations;\n  } catch(e) {}\n}\n\nif (contractId && data) {\n  try {\n    const p = '/tmp/contractlens_state/' + contractId + '.json';\n    const state = JSON.parse(fs.readFileSync(p, 'utf8'));\n    state.obligations = data;\n    state.updatedAt = new Date().toISOString();\n    fs.writeFileSync(p, JSON.stringify(state));\n  } catch(e) {}\n}\n\nreturn [{\n  json: {\n    contractId,\n    resumeFrom,\n    text,\n    obligations: data || [],\n    output: { obligations: data || [] }\n  }\n}];"
+        },
+        "id": "save-obligation-code-id",
+        "name": "Save Obligation",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2800,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $json;\nif (item.failed) return [{ json: item }];\n\nconst fs = require('fs');\n\nconst contractId = item.contractId;\nconst resumeFrom = (item.resumeFrom || 'clause').toLowerCase();\n\nlet text = item.text || '';\nlet saved = null;\nif (contractId) {\n  try {\n    const raw = fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8');\n    const state = JSON.parse(raw);\n    if (state.text) text = state.text;\n    // If state already has a valid summary object with contents, reuse it to prevent rate limit stalls\n    if (state.summary && (state.summary.contract_name || state.summary.overall_assessment || state.summary.parties)) {\n      saved = state.summary;\n    }\n  } catch (e) {}\n}\n\nif (saved) {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      output: saved,\n      summary: saved,\n      reused: true,\n      shouldReuse: true\n    }\n  }];\n} else {\n  return [{\n    json: {\n      ...item,\n      contractId,\n      resumeFrom,\n      text,\n      shouldReuse: false\n    }\n  }];\n}\n"
+        },
+        "id": "check-summary-code-id",
+        "name": "Check Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2960,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst item = $json;\n\nlet prevItem = {};\ntry { prevItem = $('Check Summary').first().json || {}; } catch(e) {}\n\nconst contractId = item.contractId || prevItem.contractId;\nconst resumeFrom = item.resumeFrom || prevItem.resumeFrom || 'clause';\nconst text = item.text || prevItem.text || '';\n\nif (item.failed) {\n  return [{ json: item }];\n}\n\nif (item.error) {\n  return [{\n    json: {\n      success: false,\n      failed: true,\n      failedAgent: 'Executive Summary Agent',\n      stage: 'summary',\n      contractId,\n      resumeFrom,\n      error: item.error.message || String(item.error)\n    }\n  }];\n}\n\nlet data = item.output || item.summary;\nif (!data && typeof item.output === 'string') {\n  try {\n    const parsed = JSON.parse(item.output);\n    data = parsed;\n  } catch(e) {}\n}\nif (!data && item.text && item.text.includes('\"summary\"')) {\n  try {\n    const parsed = JSON.parse(item.text);\n    data = parsed;\n  } catch(e) {}\n}\nif (!data && item.contract_name) {\n  data = item;\n}\n\nif (contractId && data) {\n  try {\n    const p = '/tmp/contractlens_state/' + contractId + '.json';\n    const state = JSON.parse(fs.readFileSync(p, 'utf8'));\n    state.summary = data;\n    state.updatedAt = new Date().toISOString();\n    fs.writeFileSync(p, JSON.stringify(state));\n  } catch(e) {}\n}\n\nreturn [{\n  json: {\n    contractId,\n    resumeFrom,\n    text,\n    summary: data || {},\n    output: data || {}\n  }\n}];"
+        },
+        "id": "save-summary-code-id",
+        "name": "Save Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3360,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst item = $json;\n\nlet prevItem = {};\ntry { prevItem = $('Check Summary').first().json || {}; } catch(e) {}\n\nconst contractId = item.contractId || prevItem.contractId;\n\nif (item.failed) {\n  return [{\n    json: {\n      success: false,\n      failed: true,\n      failedAgent: item.failedAgent,\n      stage: item.stage,\n      contractId: contractId || item.contractId,\n      error: item.error\n    }\n  }];\n}\n\nlet state = {};\nif (contractId) {\n  try {\n    state = JSON.parse(fs.readFileSync('/tmp/contractlens_state/' + contractId + '.json', 'utf8'));\n  } catch (e) {}\n}\n\nconst clauses = state.clauses || item.clauses || [];\nconst risks = state.risks || item.risks || [];\nconst obligations = state.obligations || item.obligations || [];\nconst summary = state.summary || item.summary || {};\n\nreturn [\n  { json: { contractId, output: { clauses } } },\n  { json: { contractId, output: { risks } } },\n  { json: { contractId, output: { obligations } } },\n  { json: { contractId, output: summary } }\n];"
+        },
+        "id": "assemble-analysis-code-id",
+        "name": "Assemble Analysis",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3520,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": 422
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          3720,
+          600
+        ],
+        "id": "respond-error-node-id",
+        "name": "Respond Error"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "leftValue": "={{ $json.shouldReuse }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "is-clause-cached-if-id",
+        "name": "Is Clause Cached?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1440,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "leftValue": "={{ $json.shouldReuse }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "is-risk-cached-if-id",
+        "name": "Is Risk Cached?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2000,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "leftValue": "={{ $json.shouldReuse }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "is-obligation-cached-if-id",
+        "name": "Is Obligation Cached?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2560,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "leftValue": "={{ $json.shouldReuse }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "is-summary-cached-if-id",
+        "name": "Is Summary Cached?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          3120,
+          384
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "id-1",
+                "leftValue": "={{ $json.failed }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "check-any-failed-if-id",
+        "name": "Check Any Failed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          3680,
+          384
+        ]
+      }
+    ],
+    "connections": {
+      "Risk Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "Risk Assessment Agent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clause Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "Clause Extraction Agent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert Clauses": {
+        "main": [
+          [
+            {
+              "node": "Insert Obligations",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Summary Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "Executive Summary Agent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert Contract": {
+        "main": [
+          []
+        ]
+      },
+      "Check Risk Level": {
+        "main": [
+          [
+            {
+              "node": "Send Email Alert",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Send Slack Alert",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude 3.5 Model": {
+        "ai_languageModel": [
+          []
+        ]
+      },
+      "Extract PDF Text": {
+        "main": [
+          [
+            {
+              "node": "Init State",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obligation Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "Obligation Extraction Agent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert Obligations": {
+        "main": [
+          [
+            {
+              "node": "Insert Risk Scoring",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert Risk Scoring": {
+        "main": [
+          []
+        ]
+      },
+      "Calculate Risk Score": {
+        "main": [
+          [
+            {
+              "node": "Prepare Contract Data",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Check Risk Level",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Contract Data": {
+        "main": [
+          [
+            {
+              "node": "Insert Contract",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Risk Assessment Agent": {
+        "main": [
+          [
+            {
+              "node": "Save Risk",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Workflow Configuration": {
+        "main": [
+          [
+            {
+              "node": "Extract PDF Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clause Extraction Agent": {
+        "main": [
+          [
+            {
+              "node": "Save Clause",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Contract Upload Webhook": {
+        "main": [
+          [
+            {
+              "node": "Workflow Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Executive Summary Agent": {
+        "main": [
+          [
+            {
+              "node": "Save Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obligation Extraction Agent": {
+        "main": [
+          [
+            {
+              "node": "Save Obligation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Gemini Chat Model": {
+        "ai_languageModel": [
+          []
+        ]
+      },
+      "Mistral Cloud Chat Model": {
+        "ai_languageModel": [
+          []
+        ]
+      },
+      "Groq Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Executive Summary Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            },
+            {
+              "node": "Risk Assessment Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Groq Chat Model1": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Clause Extraction Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            },
+            {
+              "node": "Obligation Extraction Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Init State": {
+        "main": [
+          [
+            {
+              "node": "Check Clause",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Contract Resume Webhook": {
+        "main": [
+          [
+            {
+              "node": "Load State",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load State": {
+        "main": [
+          [
+            {
+              "node": "Check Clause",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Clause": {
+        "main": [
+          [
+            {
+              "node": "Is Clause Cached?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Clause": {
+        "main": [
+          [
+            {
+              "node": "Check Risk",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Risk": {
+        "main": [
+          [
+            {
+              "node": "Is Risk Cached?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Risk": {
+        "main": [
+          [
+            {
+              "node": "Check Obligation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Obligation": {
+        "main": [
+          [
+            {
+              "node": "Is Obligation Cached?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Obligation": {
+        "main": [
+          [
+            {
+              "node": "Check Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Summary": {
+        "main": [
+          [
+            {
+              "node": "Is Summary Cached?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Summary": {
+        "main": [
+          [
+            {
+              "node": "Assemble Analysis",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Assemble Analysis": {
+        "main": [
+          [
+            {
+              "node": "Check Any Failed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Clause Cached?": {
+        "main": [
+          [
+            {
+              "node": "Save Clause",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Clause Extraction Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Risk Cached?": {
+        "main": [
+          [
+            {
+              "node": "Save Risk",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Risk Assessment Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Obligation Cached?": {
+        "main": [
+          [
+            {
+              "node": "Save Obligation",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Obligation Extraction Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Summary Cached?": {
+        "main": [
+          [
+            {
+              "node": "Save Summary",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Executive Summary Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Any Failed?": {
+        "main": [
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Calculate Risk Score",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "staticData": null,
+    "meta": {
+      "templateId": "14823"
+    },
+    "nodeGroups": [],
+    "pinData": {},
+    "versionId": "0025e9c0-0f54-4124-89f7-ccb82eec1752",
+    "activeVersionId": "0025e9c0-0f54-4124-89f7-ccb82eec1752",
+    "versionCounter": 160,
+    "triggerCount": 2,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-09-19T08:52:24.636Z",
+        "createdAt": "2026-09-19T08:52:24.636Z",
+        "role": "workflow:owner",
+        "workflowId": "YzO4pksRLgheWGUL",
+        "projectId": "MXepS2lIArNBuLRO",
+        "project": {
+          "updatedAt": "2026-09-12T18:56:35.112Z",
+          "createdAt": "2026-09-12T18:54:14.636Z",
+          "id": "MXepS2lIArNBuLRO",
+          "name": "Achyut Pandey <achyutpandey1212@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "63a316c6-9e7e-4e34-b96c-7c97be70144c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

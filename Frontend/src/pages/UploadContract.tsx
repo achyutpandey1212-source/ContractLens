@@ -155,7 +155,7 @@ export const UploadContract: React.FC = () => {
 
       {/* Back */}
       <Link
-        to="/"
+        to="/dashboard"
         className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] uppercase text-neutral-500 hover:text-black transition-colors mb-8"
       >
         ← DASHBOARD
