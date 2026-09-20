@@ -34,13 +34,15 @@ export const Dashboard: React.FC = () => {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
-      return new Date(dateStr).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
+      return new Date(dateStr)
+        .toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+        .toUpperCase();
     } catch {
-      return dateStr;
+      return dateStr.toUpperCase();
     }
   };
 
@@ -54,9 +56,9 @@ export const Dashboard: React.FC = () => {
   const riskTextStyle = (level: string) => {
     switch (level) {
       case 'CRITICAL':
-        return 'text-black font-medium';
+        return 'text-black font-semibold';
       case 'HIGH':
-        return 'text-black';
+        return 'text-neutral-900 font-medium';
       case 'MEDIUM':
         return 'text-neutral-600';
       case 'LOW':
@@ -87,10 +89,10 @@ export const Dashboard: React.FC = () => {
 
       {/* ── Metrics Strip ─────────────────────────────── */}
       {!loading && !error && (
-        <div className="flex flex-wrap items-start gap-10 md:gap-16 mb-12">
+        <div className="flex flex-wrap items-start gap-12 md:gap-20 mb-12">
           <Metric value={total}   label="Total Contracts" />
           <Metric value={highRisk} label="High Risk"       />
-          <Metric value={active}  label="Active"           />
+          <Metric value={active}  label="Active Contracts" />
         </div>
       )}
 
@@ -107,13 +109,13 @@ export const Dashboard: React.FC = () => {
       {/* ── Recent Contracts ──────────────────────────── */}
       <div>
         {/* Section header */}
-        <div className="flex items-center justify-between mb-7">
-          <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-[11px] tracking-[0.24em] uppercase text-neutral-500 font-medium">
             RECENT CONTRACTS
           </h2>
           <button
             onClick={() => navigate('/upload')}
-            className="text-[11px] tracking-[0.14em] uppercase border border-black px-4 py-2 text-black bg-white hover:bg-[#D3FD50] hover:border-[#D3FD50] transition-colors"
+            className="text-[11px] tracking-[0.16em] uppercase border border-black px-4 py-2 text-black bg-white hover:bg-[#D3FD50] hover:border-black transition-colors cursor-pointer"
           >
             + ANALYZE NEW
           </button>
@@ -121,7 +123,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Loading state */}
         {loading && (
-          <div className="py-16 text-center">
+          <div className="py-20 text-center">
             <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-400 animate-pulse">
               LOADING CONTRACTS...
             </p>
@@ -140,35 +142,35 @@ export const Dashboard: React.FC = () => {
 
         {/* Empty state */}
         {!loading && !error && contracts.length === 0 && (
-          <div className="py-20 border border-dashed border-neutral-300 text-center">
+          <div className="py-24 border border-dashed border-neutral-300 text-center">
             <p className="text-2xl font-medium text-black mb-2">NO CONTRACTS YET.</p>
             <p className="text-[11px] tracking-[0.18em] uppercase text-neutral-500 mb-8">
-              Upload your first contract to begin analysis.
+              Upload a contract to begin analysis.
             </p>
             <button
               onClick={() => navigate('/upload')}
-              className="text-[11px] tracking-[0.14em] uppercase bg-black text-white px-6 py-3 hover:bg-[#D3FD50] hover:text-black transition-colors"
+              className="text-[11px] tracking-[0.16em] uppercase bg-black text-white px-6 py-3.5 hover:bg-[#D3FD50] hover:text-black transition-colors cursor-pointer"
             >
               ANALYZE A CONTRACT →
             </button>
           </div>
         )}
 
-        {/* Contract list */}
+        {/* Contract list — Editorial Document Index */}
         {!loading && !error && contracts.length > 0 && (
           <div>
             {/* Column headers */}
-            <div className="grid grid-cols-12 gap-4 pb-3 border-b border-black">
-              <span className="col-span-6 text-[10px] tracking-[0.22em] uppercase text-neutral-500">
+            <div className="grid grid-cols-12 gap-4 pb-3 border-b border-black text-[10px] tracking-[0.22em] uppercase text-neutral-500 font-medium">
+              <span className="col-span-6">
                 CONTRACT
               </span>
-              <span className="col-span-2 text-[10px] tracking-[0.22em] uppercase text-neutral-500">
+              <span className="col-span-2">
                 RISK
               </span>
-              <span className="col-span-2 text-[10px] tracking-[0.22em] uppercase text-neutral-500">
+              <span className="col-span-2">
                 SCORE
               </span>
-              <span className="col-span-2 text-[10px] tracking-[0.22em] uppercase text-neutral-500 text-right">
+              <span className="col-span-2 text-right">
                 DATE
               </span>
             </div>
@@ -178,16 +180,16 @@ export const Dashboard: React.FC = () => {
               <div
                 key={contract.id}
                 onClick={() => navigate(`/contracts/${contract.id}`)}
-                className="grid grid-cols-12 gap-4 py-4 border-b border-neutral-100 hover:border-[#D3FD50] hover:bg-[#D3FD50]/10 cursor-pointer transition-all group"
+                className="grid grid-cols-12 gap-4 py-5 border-b border-neutral-200 hover:bg-[#D3FD50] hover:border-black cursor-pointer transition-all duration-150 group px-2 -mx-2"
               >
                 <div className="col-span-6 flex items-center">
-                  <span className="text-sm font-medium text-black group-hover:text-black leading-snug">
-                    {contract.name}
+                  <span className="text-sm md:text-base font-medium text-black transition-transform duration-150 group-hover:translate-x-1.5 leading-snug">
+                    {contract.name.replace(/_/g, ' ')}
                   </span>
                 </div>
                 <div className="col-span-2 flex items-center">
                   <span
-                    className={`text-[11px] tracking-[0.12em] uppercase font-medium ${riskTextStyle(
+                    className={`text-[11px] tracking-[0.14em] uppercase ${riskTextStyle(
                       contract.riskLevel
                     )}`}
                   >
@@ -195,13 +197,16 @@ export const Dashboard: React.FC = () => {
                   </span>
                 </div>
                 <div className="col-span-2 flex items-center">
-                  <span className="text-sm tabular-nums font-medium text-black">
+                  <span className="text-sm md:text-base tabular-nums font-mono font-medium text-black">
                     {contract.riskScore}%
                   </span>
                 </div>
-                <div className="col-span-2 flex items-center justify-end">
-                  <span className="text-xs text-neutral-400">
+                <div className="col-span-2 flex items-center justify-end gap-2">
+                  <span className="text-xs font-mono text-neutral-500 group-hover:text-black transition-colors">
                     {formatDate(contract.createdAt)}
+                  </span>
+                  <span className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 text-black font-medium text-sm">
+                    →
                   </span>
                 </div>
               </div>

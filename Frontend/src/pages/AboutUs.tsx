@@ -53,8 +53,7 @@ export const AboutUs: React.FC = () => {
           EVERY AGREEMENT HOLDS A PROMISE. AND OFTEN, A TRAP.
         </h1>
         <p className="mt-8 md:mt-12 text-lg sm:text-xl md:text-2xl text-neutral-600 max-w-3xl leading-relaxed font-normal">
-          ContractLens is an AI-powered intelligence platform built to expose hidden risks, 
-          track obligations, and give teams clarity before signing or renewing routine business contracts.
+          ContractLens exposes hidden risks, tracks binding obligations, and delivers contract clarity before signing or renewing.
         </p>
       </section>
 

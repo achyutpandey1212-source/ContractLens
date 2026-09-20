@@ -46,12 +46,6 @@ export const Obligations: React.FC = () => {
         <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-medium tracking-tight leading-none text-black">
           OBLIGATIONS.
         </h1>
-        {!loading && !error && (
-          <p className="text-sm text-neutral-500 mt-3">
-            {obligations.length} TOTAL OBLIGATION
-            {obligations.length !== 1 ? 'S' : ''} IDENTIFIED
-          </p>
-        )}
       </div>
 
       <hr className="border-black mb-8" />
@@ -76,7 +70,7 @@ export const Obligations: React.FC = () => {
 
       {/* ── Empty ────────────────────────────────── */}
       {!loading && !error && obligations.length === 0 && (
-        <div className="py-20 border border-dashed border-neutral-200 text-center">
+        <div className="py-24 border border-dashed border-neutral-200 text-center">
           <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-400">
             NO OBLIGATIONS FOUND FOR THIS CONTRACT.
           </p>
@@ -86,18 +80,25 @@ export const Obligations: React.FC = () => {
       {/* ── Table ────────────────────────────────── */}
       {!loading && !error && obligations.length > 0 && (
         <div>
-          {/* Column headers */}
-          <div className="grid grid-cols-12 gap-4 pb-3 border-b border-black">
+          {/* Section Summary & Column headers */}
+          <div className="flex items-baseline justify-between mb-4">
+            <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 font-medium">
+              DOCUMENT OBLIGATIONS
+            </span>
+            <span className="text-[10px] tracking-[0.16em] uppercase text-neutral-400 font-mono">
+              {obligations.length} RECORD{obligations.length !== 1 ? 'S' : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-12 gap-4 pb-3 border-b border-black text-[10px] tracking-[0.22em] uppercase text-neutral-500 font-medium">
             <div className="col-span-2">
-              <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-500">PARTY</span>
+              <span>PARTY</span>
             </div>
-            <div className="col-span-7">
-              <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-500">
-                OBLIGATION
-              </span>
+            <div className="col-span-8">
+              <span>OBLIGATION</span>
             </div>
-            <div className="col-span-3 text-right">
-              <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-500">STATUS</span>
+            <div className="col-span-2 text-right">
+              <span>STATUS</span>
             </div>
           </div>
 
@@ -109,15 +110,15 @@ export const Obligations: React.FC = () => {
             return (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-4 py-5 border-b border-neutral-100 hover:border-[#D3FD50] hover:bg-[#D3FD50]/5 transition-all"
+                className="grid grid-cols-12 gap-4 py-6 border-b border-neutral-200 hover:border-black hover:bg-[#D3FD50] transition-colors duration-150 group px-2 -mx-2"
               >
                 {/* Party badge */}
                 <div className="col-span-2 flex items-start pt-0.5">
                   <span
-                    className={`inline-block text-[10px] tracking-[0.12em] uppercase px-2 py-0.5 border font-medium ${
+                    className={`inline-block text-[10px] tracking-[0.14em] uppercase px-2 py-0.5 border font-semibold ${
                       isVendor
-                        ? 'border-black text-black'
-                        : 'border-neutral-400 text-neutral-600'
+                        ? 'border-black bg-black text-white group-hover:border-black'
+                        : 'border-neutral-400 bg-white text-black'
                     }`}
                   >
                     {party || '—'}
@@ -125,13 +126,15 @@ export const Obligations: React.FC = () => {
                 </div>
 
                 {/* Obligation text */}
-                <div className="col-span-7 flex items-start">
-                  <p className="text-sm text-black leading-relaxed">{item.obligation_text}</p>
+                <div className="col-span-8 flex items-start">
+                  <p className="text-sm md:text-base text-black leading-relaxed font-normal">
+                    {item.obligation_text}
+                  </p>
                 </div>
 
                 {/* Status */}
-                <div className="col-span-3 flex items-start justify-end">
-                  <span className="text-[10px] tracking-[0.12em] uppercase text-neutral-500 border border-neutral-200 px-2 py-0.5">
+                <div className="col-span-2 flex items-start justify-end">
+                  <span className="text-[10px] tracking-[0.14em] font-mono uppercase text-neutral-600 border border-neutral-300 group-hover:border-black group-hover:text-black px-2 py-0.5">
                     {(item.status ?? 'PENDING').toUpperCase()}
                   </span>
                 </div>

@@ -47,10 +47,16 @@ export const ContractDetails: React.FC = () => {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try {
-      return new Date(dateStr).toLocaleDateString('en-GB', {
-        day: '2-digit', month: 'short', year: 'numeric',
-      });
-    } catch { return dateStr; }
+      return new Date(dateStr)
+        .toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+        .toUpperCase();
+    } catch {
+      return dateStr.toUpperCase();
+    }
   };
 
   /* ── Loading ──────────────────────────────────────── */
@@ -117,50 +123,52 @@ export const ContractDetails: React.FC = () => {
 
       {/* ── Contract Header ────────────────────────── */}
       {partyLine && (
-        <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-500 mb-2">
+        <p className="text-[10px] tracking-[0.26em] uppercase text-neutral-400 mb-3 font-medium">
           {partyLine}
         </p>
       )}
-      <h1 className="text-3xl md:text-4xl lg:text-5xl font-medium tracking-tight leading-tight text-black mb-2">
-        {contract.name.toUpperCase()}
+      <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-medium tracking-tight leading-[1.05] uppercase text-black mb-3 max-w-5xl">
+        {contract.name.replace(/_/g, ' ')}
       </h1>
       {contract.contractType && (
-        <p className="text-sm text-neutral-500 mb-8">{contract.contractType}</p>
+        <p className="text-xs font-mono uppercase tracking-[0.18em] text-neutral-400 mb-8">
+          {contract.contractType}
+        </p>
       )}
 
-      <hr className="border-black mb-8" />
+      <hr className="border-black mb-10" />
 
-      {/* ── Risk Score + Metadata ──────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+      {/* ── Risk Score Visual Anchor + Metadata Strip ──────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 mb-12 items-end">
 
-        {/* Risk score block */}
-        <div className="flex items-end gap-5">
-          <div>
-            <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-500 mb-2">
-              RISK SCORE
-            </p>
-            <p className="text-7xl md:text-8xl font-medium tabular-nums leading-none text-black">
+        {/* Risk score visual anchor (large typography, pure whitespace) */}
+        <div className="lg:col-span-5 space-y-3">
+          <p className="text-[10px] tracking-[0.24em] uppercase text-neutral-400 font-medium">
+            COMPUTED RISK SCORE
+          </p>
+          <div className="flex items-baseline gap-4">
+            <span className="text-8xl sm:text-9xl font-medium tabular-nums font-mono leading-none tracking-tight text-black">
               {contract.riskScore}%
-            </p>
-          </div>
-          <div className="mb-2">
-            <RiskBadge level={riskLevel} className="text-xs px-3 py-1" />
+            </span>
+            <RiskBadge level={riskLevel} className="text-xs px-3 py-1 font-semibold" />
           </div>
         </div>
 
-        {/* Metadata grid */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+        {/* Metadata grid (clean rules & whitespace, no boxy cards) */}
+        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 lg:pt-0 border-t lg:border-t-0 lg:border-l border-neutral-200 lg:pl-10">
           {[
             { label: 'CLIENT',    value: contract.client          ?? 'N/A' },
             { label: 'VENDOR',    value: contract.vendor          ?? 'N/A' },
             { label: 'EFFECTIVE', value: formatDate(contract.effectiveDate) },
             { label: 'EXPIRES',   value: formatDate(contract.expirationDate) },
           ].map(({ label, value }) => (
-            <div key={label}>
-              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-0.5">
+            <div key={label} className="space-y-1">
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 font-medium">
                 {label}
               </p>
-              <p className="text-sm font-medium text-black leading-snug">{value}</p>
+              <p className="text-sm font-medium text-black leading-snug break-words">
+                {value}
+              </p>
             </div>
           ))}
         </div>
@@ -169,7 +177,7 @@ export const ContractDetails: React.FC = () => {
       <hr className="border-neutral-200 mb-8" />
 
       {/* ── Tabs ──────────────────────────────────── */}
-      <div className="mb-8">
+      <div className="mb-10">
         <Tabs
           tabs={tabItems}
           active={activeTab}
@@ -179,32 +187,40 @@ export const ContractDetails: React.FC = () => {
 
       {/* ── Overview Tab ──────────────────────────── */}
       {activeTab === 'overview' && (
-        <div className="max-w-3xl space-y-8">
+        <div className="max-w-4xl space-y-10">
           <div>
-            <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500 mb-5">
-              OVERVIEW
+            <h2 className="text-[11px] tracking-[0.24em] uppercase text-neutral-400 font-medium mb-4">
+              EXECUTIVE OVERVIEW
             </h2>
-            <p className="text-base text-black leading-relaxed">{overviewSummary}</p>
+            <p className="text-lg md:text-xl text-black font-normal leading-relaxed">
+              {overviewSummary}
+            </p>
           </div>
 
           <hr className="border-neutral-200" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             <div>
-              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">TYPE</p>
-              <p className="text-sm font-medium text-black">
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1 font-medium">
+                AGREEMENT TYPE
+              </p>
+              <p className="text-sm md:text-base font-medium text-black">
                 {contract.contractType ?? contract.summary?.contract_type ?? 'Contract'}
               </p>
             </div>
             <div>
-              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">DOCUMENT</p>
-              <p className="text-sm font-medium text-black">
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1 font-medium">
+                SOURCE DOCUMENT
+              </p>
+              <p className="text-sm md:text-base font-medium text-black font-mono truncate">
                 {contract.originalFileName ?? 'Uploaded Document'}
               </p>
             </div>
             <div>
-              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">VALUE</p>
-              <p className="text-sm font-medium text-black">
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1 font-medium">
+                STATED VALUE
+              </p>
+              <p className="text-sm md:text-base font-medium text-black">
                 {contract.value ?? contract.summary?.value ?? 'N/A'}
               </p>
             </div>
@@ -212,73 +228,65 @@ export const ContractDetails: React.FC = () => {
         </div>
       )}
 
-      {/* ── Risks Tab ─────────────────────────────── */}
+      {/* ── Risks Tab (Editorial Report Style) ─────────────────────── */}
       {activeTab === 'risks' && (
         <div>
-          <div className="flex items-baseline justify-between mb-8">
-            <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500">
+          <div className="flex items-baseline justify-between mb-8 pb-3 border-b border-black">
+            <h2 className="text-[11px] tracking-[0.24em] uppercase text-neutral-500 font-medium">
               RISK FINDINGS
             </h2>
-            <span className="text-[10px] tracking-[0.14em] uppercase text-neutral-400">
+            <span className="text-[10px] tracking-[0.16em] uppercase text-neutral-400 font-mono">
               {risks.length} FINDING{risks.length !== 1 ? 'S' : ''}
             </span>
           </div>
 
           {risks.length === 0 ? (
-            <div className="py-20 border border-dashed border-neutral-200 text-center">
+            <div className="py-24 border border-dashed border-neutral-200 text-center">
               <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-400">
                 NO SIGNIFICANT RISKS IDENTIFIED.
               </p>
             </div>
           ) : (
-            <div>
+            <div className="divide-y divide-neutral-200">
               {risks.map((finding, idx) => {
                 const level = normalizeRiskLevel(finding.risk_level);
                 return (
-                  <div key={idx}>
-                    <div className="py-8 grid grid-cols-12 gap-4 md:gap-8">
-                      {/* Index + Badge column */}
-                      <div className="col-span-12 md:col-span-3 flex items-start gap-4">
-                        <span className="text-[10px] tracking-[0.18em] text-neutral-400 tabular-nums mt-0.5 shrink-0">
+                  <div key={idx} className="py-10 first:pt-4">
+                    <div className="grid grid-cols-12 gap-6 md:gap-10">
+                      {/* Left Column: Big index + Monochrome Risk Level */}
+                      <div className="col-span-12 md:col-span-3 space-y-3">
+                        <span className="text-4xl md:text-5xl font-mono font-medium tracking-tight text-neutral-300 block leading-none">
                           {String(idx + 1).padStart(2, '0')}
                         </span>
-                        <RiskBadge level={level} />
+                        <RiskBadge level={level} className="text-xs px-3 py-1 font-semibold" />
                       </div>
 
-                      {/* Content column */}
-                      <div className="col-span-12 md:col-span-9 space-y-4">
-                        <h3
-                          className={`tracking-wide uppercase font-medium ${
-                            level === 'CRITICAL' ? 'text-base text-black' : 'text-sm text-black'
-                          }`}
-                        >
+                      {/* Right Column: Title, Description, and Editorial Recommendation */}
+                      <div className="col-span-12 md:col-span-9 space-y-5">
+                        <h3 className="text-lg md:text-xl font-medium uppercase tracking-tight text-black leading-snug">
                           {finding.clause_type
                             ? finding.clause_type.replace(/_/g, ' ')
                             : `Risk Finding #${idx + 1}`}
                         </h3>
 
                         {finding.risk_description && (
-                          <p className="text-sm text-neutral-700 leading-relaxed">
+                          <p className="text-base text-neutral-800 leading-relaxed font-normal">
                             {finding.risk_description}
                           </p>
                         )}
 
                         {finding.recommendation && (
-                          <div className="border-l-2 border-black pl-4">
-                            <p className="text-[10px] tracking-[0.18em] uppercase text-neutral-500 mb-1">
+                          <div className="border-l-2 border-black pl-5 pt-1 pb-1 mt-4">
+                            <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-500 mb-1.5 font-medium">
                               RECOMMENDATION
                             </p>
-                            <p className="text-sm text-black leading-relaxed">
+                            <p className="text-sm md:text-base text-black leading-relaxed">
                               {finding.recommendation}
                             </p>
                           </div>
                         )}
                       </div>
                     </div>
-
-                    {idx < risks.length - 1 && (
-                      <hr className="border-neutral-100" />
-                    )}
                   </div>
                 );
               })}

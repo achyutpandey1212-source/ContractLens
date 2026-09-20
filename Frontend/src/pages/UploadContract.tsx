@@ -166,9 +166,6 @@ export const UploadContract: React.FC = () => {
         <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-medium tracking-tight leading-none text-black">
           ANALYZE A CONTRACT.
         </h1>
-        <p className="mt-3 text-sm text-neutral-500">
-          Drop your PDF here. Our four specialized AI agents will handle the rest.
-        </p>
       </div>
 
       <hr className="border-black mb-10" />
@@ -228,16 +225,10 @@ export const UploadContract: React.FC = () => {
                   <span className="text-neutral-400 text-xl leading-none">+</span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-black">Drop your PDF here.</p>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    or{' '}
-                    <span className="underline cursor-pointer hover:text-black transition-colors">
-                      choose a file
-                    </span>
-                  </p>
+                  <p className="text-sm font-medium text-black">DROP PDF / CHOOSE FILE</p>
                 </div>
-                <p className="text-[10px] tracking-[0.16em] uppercase text-neutral-400">
-                  PDF FILES ONLY
+                <p className="text-[10px] tracking-[0.16em] uppercase text-neutral-400 font-mono">
+                  PDF FORMAT
                 </p>
               </div>
             )}
@@ -255,7 +246,7 @@ export const UploadContract: React.FC = () => {
           {selectedFile && status === 'idle' && (
             <button
               onClick={handleAnalyze}
-              className="w-full py-4 text-[11px] tracking-[0.18em] uppercase font-medium bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors"
+              className="w-full py-4 text-[11px] tracking-[0.18em] uppercase font-medium bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors cursor-pointer"
             >
               ANALYZE CONTRACT →
             </button>
@@ -265,7 +256,7 @@ export const UploadContract: React.FC = () => {
           {status === 'completed' && contractId && (
             <button
               onClick={() => navigate(`/contracts/${contractId}`)}
-              className="w-full py-4 text-[11px] tracking-[0.18em] uppercase font-medium bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors"
+              className="w-full py-4 text-[11px] tracking-[0.18em] uppercase font-medium bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors cursor-pointer"
             >
               VIEW CONTRACT →
             </button>
@@ -278,8 +269,8 @@ export const UploadContract: React.FC = () => {
 
             {/* Panel heading */}
             <div className="flex items-baseline justify-between">
-              <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500">
-                ANALYZING CONTRACT
+              <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500 font-medium">
+                ANALYSIS PIPELINE
               </h2>
               {selectedFile && (
                 <span className="text-[10px] tracking-[0.12em] uppercase text-neutral-400 font-mono">
@@ -310,9 +301,8 @@ export const UploadContract: React.FC = () => {
                   <h3 className="text-xl font-medium text-black leading-snug">
                     THE AGENT STUMBLED ON A STONE.
                   </h3>
-                  <p className="text-sm text-neutral-600 mt-2 leading-relaxed">
-                    The AI service temporarily ran into a request limit. Your completed
-                    analysis is safe. Only the failed stage will be retried.
+                  <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
+                    The service encountered a temporary request limit. Completed stages are preserved.
                   </p>
                 </div>
 
@@ -322,7 +312,7 @@ export const UploadContract: React.FC = () => {
                 <div>
                   <button
                     onClick={() => setShowTechError(!showTechError)}
-                    className="flex items-center gap-1.5 text-[10px] tracking-[0.14em] uppercase text-neutral-400 hover:text-black transition-colors"
+                    className="flex items-center gap-1.5 text-[10px] tracking-[0.14em] uppercase text-neutral-400 hover:text-black transition-colors cursor-pointer"
                   >
                     <ChevronDown
                       className={`w-3 h-3 transition-transform ${showTechError ? 'rotate-180' : ''}`}
@@ -338,7 +328,7 @@ export const UploadContract: React.FC = () => {
 
                 <button
                   onClick={handleRetry}
-                  className="text-[11px] tracking-[0.16em] uppercase font-medium bg-black text-white px-5 py-3 hover:bg-[#D3FD50] hover:text-black transition-colors"
+                  className="text-[11px] tracking-[0.16em] uppercase font-medium bg-black text-white px-5 py-3 hover:bg-[#D3FD50] hover:text-black transition-colors cursor-pointer"
                 >
                   TRY AGAIN →
                 </button>
@@ -349,10 +339,10 @@ export const UploadContract: React.FC = () => {
             {status === 'retrying' && (
               <div className="border border-[#D3FD50] bg-[#D3FD50]/10 p-5">
                 <p className="text-[11px] tracking-[0.16em] uppercase text-black font-medium">
-                  ⟳ GETTING THE AGENT BACK ON ITS FEET...
+                  ⟳ RESUMING ANALYSIS...
                 </p>
-                <p className="text-xs text-neutral-700 mt-1.5 leading-relaxed">
-                  Retrying only the failed stage. Your completed analysis will not be repeated.
+                <p className="text-xs text-neutral-600 mt-1">
+                  Retrying only the interrupted stage.
                 </p>
               </div>
             )}
@@ -360,10 +350,10 @@ export const UploadContract: React.FC = () => {
             {/* ── Uploading / Analyzing status ─ */}
             {(status === 'uploading' || status === 'analyzing') && !failureInfo && (
               <div className="bg-neutral-50 border border-neutral-200 p-4">
-                <p className="text-[11px] tracking-[0.18em] uppercase text-neutral-600 animate-pulse">
+                <p className="text-[11px] tracking-[0.18em] uppercase text-neutral-600 animate-pulse font-medium">
                   {status === 'uploading'
                     ? 'UPLOADING DOCUMENT...'
-                    : 'AI AGENTS ARE PROCESSING YOUR CONTRACT...'}
+                    : 'PROCESSING CONTRACT...'}
                 </p>
               </div>
             )}
