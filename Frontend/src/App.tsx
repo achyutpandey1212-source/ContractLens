@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/Header';
+import { LandingPage } from './pages/LandingPage';
 import { Dashboard } from './pages/Dashboard';
 import { UploadContract } from './pages/UploadContract';
 import { ContractDetails } from './pages/ContractDetails';
@@ -13,7 +14,8 @@ export const App: React.FC = () => {
         <Header />
         <main className="flex-1 w-full">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/upload" element={<UploadContract />} />
             <Route path="/contracts/:id" element={<ContractDetails />} />
             <Route path="/contracts/:id/obligations" element={<Obligations />} />
