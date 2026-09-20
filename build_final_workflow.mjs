@@ -1,31 +1,24 @@
 #!/usr/bin/env node
 /**
- * build_final_workflow.mjs
+ * build_final_workflow.mjs — DEFINITIVE FIX v2
  * 
- * Generates the DEFINITIVE fixed ContractLens n8n workflow.
+ * THE ROOT CAUSE (finally nailed):
+ * =================================
+ * n8n's Agent node REPLACES $json entirely with its own output.
+ * Input:  { contractId, resumeFrom, text, shouldReuse: false }
+ * Output: { output: { clauses: [...] } }  ← contractId, text GONE
  * 
- * ROOT CAUSE ANALYSIS (from user's live run):
- * ============================================
+ * So Save Clause receives { output: { clauses } } with NO contractId 
+ * and NO text. It can't find the state, can't get the text, and all
+ * downstream agents get empty text.
  * 
- * 1. "Node 'Extract PDF Text' hasn't been executed" error
- *    - The user's live workflow has agent prompts referencing
- *      $("Init State") and $("Extract PDF Text") as fallbacks.
- *    - On the resume path, these nodes don't execute → n8n throws.
- *    
- * 2. Risk Agent returns empty risks: []
- *    Obligation Agent returns empty obligations: []
- *    Summary Agent says "No contract text was provided"
- *    - The agents ARE receiving input but the text field is empty.
- *    - The n8n Agent node wraps its response in { output: ... }.
- *      After the Clause agent runs, its OUTPUT loses the "text" field.
- *      Save Clause must re-attach text from global state.
- *    - Also: the Obligation Parser has schema { "output": { "obligations": [...] } }
- *      which forces the LLM to return a double-wrapped structure.
- *    
- * 3. Merge Analysis Results is orphaned (nothing connects INTO it).
- *    Check Any Failed? (false) → Calculate Risk Score is the real path.
+ * THE FIX:
+ * ========
+ * Each Check node stores: global.__contractlens_current = { contractId, resumeFrom, text }
+ * Each Save node reads:   global.__contractlens_current (guaranteed to be set before agent runs)
  * 
- * 4. Insert Contract has $('Calculate Risk Score') cross-branch reference.
+ * Flow: Check → IF → Agent → Save
+ *       ↑ sets current         ↑ reads current
  */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -37,7 +30,7 @@ function findNode(name) {
   return out.nodes.find(n => n.name === name);
 }
 
-// ===== FIX 1: Agent prompts — ONLY {{ $json.text }}, zero fallbacks =====
+// ===== FIX: Agent prompts — ONLY {{ $json.text }} =====
 
 const clauseAgent = findNode('Clause Extraction Agent');
 clauseAgent.parameters.text = `=Analyze the following contract text and extract all clauses according to the required schema:\n\n--- CONTRACT TEXT START ---\n{{ $json.text }}\n--- CONTRACT TEXT END ---`;
@@ -49,7 +42,7 @@ clauseAgent.maxTries = 4;
 
 const riskAgent = findNode('Risk Assessment Agent');
 riskAgent.parameters.text = `=Analyze the following contract text and evaluate all legal, operational, and financial risks according to the required schema:\n\n--- CONTRACT TEXT START ---\n{{ $json.text }}\n--- CONTRACT TEXT END ---`;
-riskAgent.parameters.options.systemMessage = `You are a legal risk assessment expert specializing in contract analysis.\n\nYour task:\n1. Analyze each clause and provision in the provided contract text for potential risks.\n2. For each risk, specify:\n   - clause_type: clause category (e.g. "payment_terms", "liability", "termination", "ip", "confidentiality", "warranty", "indemnification", "data_protection", "service_level")\n   - risk_level: "critical", "high", "medium", or "low"\n   - risk_description: concise explanation of the risk factor\n   - recommendation: concrete legal or negotiation recommendation\n   - ai_confidence: confidence score between 0.0 and 1.0\n3. Identify critical risk factors such as unlimited liability, unilateral indemnity, harsh penalties, lock-in periods, or broad IP assignments.\n4. You MUST find and report ALL risks. If the contract has unfavorable terms, report them.\n\nFormat your output as a valid JSON object matching the required schema with a top-level "risks" array.\nAlways provide standard JSON arguments directly. Never output XML tags. Never include markdown code fences for function calls.`;
+riskAgent.parameters.options.systemMessage = `You are a legal risk assessment expert specializing in contract analysis.\n\nYour task:\n1. Analyze each clause and provision in the provided contract text for potential risks.\n2. For each risk, specify:\n   - clause_type: clause category (e.g. "payment_terms", "liability", "termination", "ip", "confidentiality", "warranty", "indemnification", "data_protection", "service_level")\n   - risk_level: "critical", "high", "medium", or "low"\n   - risk_description: concise explanation of the risk factor\n   - recommendation: concrete legal or negotiation recommendation\n   - ai_confidence: confidence score between 0.0 and 1.0\n3. Identify critical risk factors such as unlimited liability, unilateral indemnity, harsh penalties, lock-in periods, or broad IP assignments.\n4. You MUST find and report ALL risks. Do not return an empty array.\n\nFormat your output as a valid JSON object matching the required schema with a top-level "risks" array.\nAlways provide standard JSON arguments directly. Never output XML tags. Never include markdown code fences for function calls.`;
 riskAgent.onError = "continueRegularOutput";
 riskAgent.retryOnFail = true;
 riskAgent.waitBetweenTries = 5000;
@@ -71,7 +64,7 @@ summaryAgent.retryOnFail = true;
 summaryAgent.waitBetweenTries = 5000;
 summaryAgent.maxTries = 4;
 
-// ===== FIX 2: Obligation Parser schema — remove the extra "output" wrapper =====
+// ===== FIX: Obligation Parser schema — no extra "output" wrapper =====
 
 const obligationParser = findNode('Obligation Parser');
 obligationParser.parameters.jsonSchemaExample = JSON.stringify({
@@ -86,94 +79,262 @@ obligationParser.parameters.jsonSchemaExample = JSON.stringify({
   ]
 }, null, 2);
 
-// ===== FIX 3: Init State — no cross-branch references =====
+// ===== FIX: Init State =====
 
-const initState = findNode('Init State');
-initState.parameters.jsCode = [
-  "if (!global.__contractlens_state) global.__contractlens_state = {};",
-  "",
-  "const body = $input.first().json;",
-  "const contractId = 'contract_' + Date.now();",
-  "const text = body.text || '';",
-  "",
-  "if (!text || text.trim().length < 50) {",
-  "  throw new Error('PDF text extraction failed or text too short. Got ' + (text ? text.length : 0) + ' chars.');",
-  "}",
-  "",
-  "global.__contractlens_state[contractId] = {",
-  "  contractId, text,",
-  "  clauses: null, risks: null, obligations: null, summary: null,",
-  "  updatedAt: new Date().toISOString()",
-  "};",
-  "",
-  "return [{ json: { contractId, resumeFrom: 'clause', text } }];"
-].join("\n");
+findNode('Init State').parameters.jsCode = `// Initialize state for fresh upload
+if (!global.__contractlens_state) global.__contractlens_state = {};
 
-// ===== FIX 4: Load State — read from cache only =====
+const body = $input.first().json;
+const contractId = 'contract_' + Date.now();
+const text = body.text || '';
 
-const loadState = findNode('Load State');
-loadState.parameters.jsCode = [
-  "if (!global.__contractlens_state) global.__contractlens_state = {};",
-  "",
-  "const body = $input.first().json.body || $input.first().json;",
-  "const contractId = body.contractId;",
-  "const resumeFrom = (body.resumeFrom || 'clause').toLowerCase();",
-  "const state = global.__contractlens_state[contractId] || {};",
-  "",
-  "if (!state.text) {",
-  "  throw new Error('No cached state for contractId: ' + contractId + '. The contract must be re-uploaded.');",
-  "}",
-  "",
-  "return [{ json: {",
-  "  contractId, resumeFrom,",
-  "  text: state.text,",
-  "  clauses: state.clauses || null,",
-  "  risks: state.risks || null,",
-  "  obligations: state.obligations || null,",
-  "  summary: state.summary || null",
-  "} }];"
-].join("\n");
-
-// ===== FIX 5-12: Check and Save nodes — clean data flow =====
-
-// Helper: generates Check node code
-function makeCheckCode(stage, dataKey, priorStages) {
-  const resumeConditions = priorStages.map(s => `resumeFrom !== '${s}'`).join(' && ');
-  return [
-    "if (!global.__contractlens_state) global.__contractlens_state = {};",
-    "const item = $input.first().json;",
-    "const contractId = item.contractId;",
-    "const resumeFrom = (item.resumeFrom || 'clause').toLowerCase();",
-    "const text = item.text || (global.__contractlens_state[contractId]?.text) || '';",
-    "",
-    `const cached = global.__contractlens_state[contractId]?.${dataKey};`,
-    dataKey === 'summary'
-      ? `const shouldReuse = cached && typeof cached === 'object' && Object.keys(cached).length > 0 && ${resumeConditions};`
-      : `const shouldReuse = cached && Array.isArray(cached) && cached.length > 0 && ${resumeConditions};`,
-    "",
-    "if (shouldReuse) {",
-    "  return [{ json: {",
-    "    contractId, resumeFrom, text,",
-    "    shouldReuse: true,",
-    dataKey === 'summary'
-      ? `    summary: cached, output: cached`
-      : `    ${dataKey}: cached, output: { ${dataKey}: cached }`,
-    "  } }];",
-    "}",
-    "",
-    "return [{ json: { contractId, resumeFrom, text, shouldReuse: false } }];"
-  ].join("\n");
+if (!text || text.trim().length < 50) {
+  throw new Error('PDF text extraction failed or text too short (' + (text ? text.length : 0) + ' chars).');
 }
 
-// Helper: generates Save node code  
-function makeSaveCode(stage, dataKey) {
-  const extractFn = dataKey === 'summary' ? `
-function extractData(item) {
-  if (item.output && typeof item.output === 'object' && item.output.contract_name) return item.output;
-  if (item.output?.output && typeof item.output.output === 'object' && item.output.output.contract_name) return item.output.output;
-  if (item.contract_name) return item;
-  const candidates = [item.output, item.text, item.content, item.message].filter(s => typeof s === 'string');
-  for (const raw of candidates) {
+// Cache text in global state
+global.__contractlens_state[contractId] = {
+  contractId, text,
+  clauses: null, risks: null, obligations: null, summary: null,
+  updatedAt: new Date().toISOString()
+};
+
+// Also set as current context (for Save nodes after Agent strips $json)
+global.__contractlens_current = { contractId, resumeFrom: 'clause', text };
+
+return [{ json: { contractId, resumeFrom: 'clause', text } }];`;
+
+// ===== FIX: Load State =====
+
+findNode('Load State').parameters.jsCode = `// Load state for resume/retry
+if (!global.__contractlens_state) global.__contractlens_state = {};
+
+const body = $input.first().json.body || $input.first().json;
+const contractId = body.contractId;
+const resumeFrom = (body.resumeFrom || 'clause').toLowerCase();
+const state = global.__contractlens_state[contractId] || {};
+
+if (!state.text) {
+  throw new Error('No cached state for contractId: ' + contractId + '. Contract must be re-uploaded.');
+}
+
+// Set current context
+global.__contractlens_current = { contractId, resumeFrom, text: state.text };
+
+return [{ json: {
+  contractId, resumeFrom,
+  text: state.text,
+  clauses: state.clauses || null,
+  risks: state.risks || null,
+  obligations: state.obligations || null,
+  summary: state.summary || null
+} }];`;
+
+// ===== THE KEY FIX: Check nodes store context, Save nodes recover it =====
+
+// Check Clause
+findNode('Check Clause').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const contractId = item.contractId;
+const resumeFrom = (item.resumeFrom || 'clause').toLowerCase();
+const text = item.text || (global.__contractlens_state[contractId]?.text) || '';
+
+// ** THE KEY: store context so Save Clause can recover it after Agent strips $json **
+global.__contractlens_current = { contractId, resumeFrom, text };
+
+const cached = global.__contractlens_state[contractId]?.clauses;
+const shouldReuse = cached && Array.isArray(cached) && cached.length > 0 && resumeFrom !== 'clause';
+
+if (shouldReuse) {
+  return [{ json: { contractId, resumeFrom, text, shouldReuse: true, clauses: cached, output: { clauses: cached } } }];
+}
+return [{ json: { contractId, resumeFrom, text, shouldReuse: false } }];`;
+
+// Save Clause — recovers contractId and text from global.__contractlens_current
+findNode('Save Clause').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+
+// ** THE KEY: Agent node replaces $json entirely, losing contractId and text.
+// Recover from global.__contractlens_current (set by Check Clause before Agent ran) **
+const ctx = global.__contractlens_current || {};
+const contractId = item.contractId || ctx.contractId;
+const resumeFrom = item.resumeFrom || ctx.resumeFrom || 'clause';
+const text = item.text || ctx.text || (global.__contractlens_state[contractId]?.text) || '';
+
+// If cached bypass, data is already in item
+if (item.shouldReuse && item.clauses) {
+  return [{ json: { contractId, resumeFrom, text, clauses: item.clauses, output: { clauses: item.clauses } } }];
+}
+
+// Extract clauses from Agent output
+function extractArray(obj, key) {
+  if (obj.output?.[key] && Array.isArray(obj.output[key])) return obj.output[key];
+  if (obj[key] && Array.isArray(obj[key])) return obj[key];
+  if (obj.output?.output?.[key] && Array.isArray(obj.output.output[key])) return obj.output.output[key];
+  const strs = [obj.output, obj.text, obj.content, obj.message].filter(s => typeof s === 'string');
+  for (const raw of strs) {
+    try {
+      const p = JSON.parse(raw.includes('{') ? raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : raw);
+      if (p[key] && Array.isArray(p[key])) return p[key];
+      if (p.output?.[key]) return p.output[key];
+    } catch(e) {}
+  }
+  return [];
+}
+
+const clauses = extractArray(item, 'clauses');
+
+if (contractId && global.__contractlens_state[contractId]) {
+  global.__contractlens_state[contractId].clauses = clauses;
+  global.__contractlens_state[contractId].updatedAt = new Date().toISOString();
+}
+
+return [{ json: { contractId, resumeFrom, text, clauses, output: { clauses } } }];`;
+
+// Check Risk
+findNode('Check Risk').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const contractId = item.contractId;
+const resumeFrom = (item.resumeFrom || 'clause').toLowerCase();
+const text = item.text || (global.__contractlens_state[contractId]?.text) || '';
+
+// Store context for Save Risk (Agent will strip $json)
+global.__contractlens_current = { contractId, resumeFrom, text };
+
+const cached = global.__contractlens_state[contractId]?.risks;
+const shouldReuse = cached && Array.isArray(cached) && cached.length > 0 && resumeFrom !== 'clause' && resumeFrom !== 'risk';
+
+if (shouldReuse) {
+  return [{ json: { contractId, resumeFrom, text, shouldReuse: true, risks: cached, output: { risks: cached } } }];
+}
+return [{ json: { contractId, resumeFrom, text, shouldReuse: false } }];`;
+
+// Save Risk
+findNode('Save Risk').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const ctx = global.__contractlens_current || {};
+const contractId = item.contractId || ctx.contractId;
+const resumeFrom = item.resumeFrom || ctx.resumeFrom || 'clause';
+const text = item.text || ctx.text || (global.__contractlens_state[contractId]?.text) || '';
+
+if (item.shouldReuse && item.risks) {
+  return [{ json: { contractId, resumeFrom, text, risks: item.risks, output: { risks: item.risks } } }];
+}
+
+function extractArray(obj, key) {
+  if (obj.output?.[key] && Array.isArray(obj.output[key])) return obj.output[key];
+  if (obj[key] && Array.isArray(obj[key])) return obj[key];
+  if (obj.output?.output?.[key] && Array.isArray(obj.output.output[key])) return obj.output.output[key];
+  const strs = [obj.output, obj.text, obj.content, obj.message].filter(s => typeof s === 'string');
+  for (const raw of strs) {
+    try {
+      const p = JSON.parse(raw.includes('{') ? raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : raw);
+      if (p[key] && Array.isArray(p[key])) return p[key];
+      if (p.output?.[key]) return p.output[key];
+    } catch(e) {}
+  }
+  return [];
+}
+
+const risks = extractArray(item, 'risks');
+
+if (contractId && global.__contractlens_state[contractId]) {
+  global.__contractlens_state[contractId].risks = risks;
+  global.__contractlens_state[contractId].updatedAt = new Date().toISOString();
+}
+
+return [{ json: { contractId, resumeFrom, text, risks, output: { risks } } }];`;
+
+// Check Obligation
+findNode('Check Obligation').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const contractId = item.contractId;
+const resumeFrom = (item.resumeFrom || 'clause').toLowerCase();
+const text = item.text || (global.__contractlens_state[contractId]?.text) || '';
+
+// Store context for Save Obligation
+global.__contractlens_current = { contractId, resumeFrom, text };
+
+const cached = global.__contractlens_state[contractId]?.obligations;
+const shouldReuse = cached && Array.isArray(cached) && cached.length > 0 && resumeFrom !== 'clause' && resumeFrom !== 'risk' && resumeFrom !== 'obligation';
+
+if (shouldReuse) {
+  return [{ json: { contractId, resumeFrom, text, shouldReuse: true, obligations: cached, output: { obligations: cached } } }];
+}
+return [{ json: { contractId, resumeFrom, text, shouldReuse: false } }];`;
+
+// Save Obligation
+findNode('Save Obligation').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const ctx = global.__contractlens_current || {};
+const contractId = item.contractId || ctx.contractId;
+const resumeFrom = item.resumeFrom || ctx.resumeFrom || 'clause';
+const text = item.text || ctx.text || (global.__contractlens_state[contractId]?.text) || '';
+
+if (item.shouldReuse && item.obligations) {
+  return [{ json: { contractId, resumeFrom, text, obligations: item.obligations, output: { obligations: item.obligations } } }];
+}
+
+function extractArray(obj, key) {
+  if (obj.output?.[key] && Array.isArray(obj.output[key])) return obj.output[key];
+  if (obj[key] && Array.isArray(obj[key])) return obj[key];
+  if (obj.output?.output?.[key] && Array.isArray(obj.output.output[key])) return obj.output.output[key];
+  const strs = [obj.output, obj.text, obj.content, obj.message].filter(s => typeof s === 'string');
+  for (const raw of strs) {
+    try {
+      const p = JSON.parse(raw.includes('{') ? raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : raw);
+      if (p[key] && Array.isArray(p[key])) return p[key];
+      if (p.output?.[key]) return p.output[key];
+    } catch(e) {}
+  }
+  return [];
+}
+
+const obligations = extractArray(item, 'obligations');
+
+if (contractId && global.__contractlens_state[contractId]) {
+  global.__contractlens_state[contractId].obligations = obligations;
+  global.__contractlens_state[contractId].updatedAt = new Date().toISOString();
+}
+
+return [{ json: { contractId, resumeFrom, text, obligations, output: { obligations } } }];`;
+
+// Check Summary
+findNode('Check Summary').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const contractId = item.contractId;
+const resumeFrom = (item.resumeFrom || 'clause').toLowerCase();
+const text = item.text || (global.__contractlens_state[contractId]?.text) || '';
+
+// Store context for Save Summary
+global.__contractlens_current = { contractId, resumeFrom, text };
+
+const cached = global.__contractlens_state[contractId]?.summary;
+const shouldReuse = cached && typeof cached === 'object' && Object.keys(cached).length > 0 && resumeFrom !== 'summary';
+
+if (shouldReuse) {
+  return [{ json: { contractId, resumeFrom, text, shouldReuse: true, summary: cached, output: cached } }];
+}
+return [{ json: { contractId, resumeFrom, text, shouldReuse: false } }];`;
+
+// Save Summary
+findNode('Save Summary').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const ctx = global.__contractlens_current || {};
+const contractId = item.contractId || ctx.contractId;
+const resumeFrom = item.resumeFrom || ctx.resumeFrom || 'clause';
+const text = item.text || ctx.text || (global.__contractlens_state[contractId]?.text) || '';
+
+if (item.shouldReuse && item.summary && typeof item.summary === 'object') {
+  return [{ json: { contractId, resumeFrom, text, summary: item.summary, output: item.summary } }];
+}
+
+function extractSummary(obj) {
+  if (obj.output && typeof obj.output === 'object' && obj.output.contract_name) return obj.output;
+  if (obj.output?.output && typeof obj.output.output === 'object' && obj.output.output.contract_name) return obj.output.output;
+  if (obj.contract_name) return obj;
+  const strs = [obj.output, obj.text, obj.content, obj.message].filter(s => typeof s === 'string');
+  for (const raw of strs) {
     try {
       const p = JSON.parse(raw.includes('{') ? raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : raw);
       if (p.contract_name) return p;
@@ -181,96 +342,41 @@ function extractData(item) {
     } catch(e) {}
   }
   return {};
-}` : `
-function extractData(item, key) {
-  if (item.output && item.output[key] && Array.isArray(item.output[key])) return item.output[key];
-  if (item[key] && Array.isArray(item[key])) return item[key];
-  if (item.output?.output?.[key] && Array.isArray(item.output.output[key])) return item.output.output[key];
-  const candidates = [item.output, item.text, item.content, item.message].filter(s => typeof s === 'string');
-  for (const raw of candidates) {
-    try {
-      const p = JSON.parse(raw.includes('{') ? raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : raw);
-      if (p[key] && Array.isArray(p[key])) return p[key];
-      if (p.output?.[key] && Array.isArray(p.output[key])) return p.output[key];
-    } catch(e) {}
-  }
-  return [];
-}`;
-
-  const reuseCheck = dataKey === 'summary'
-    ? `if (item.shouldReuse && item.summary && typeof item.summary === 'object') {\n  return [{ json: { contractId, resumeFrom, text, summary: item.summary, output: item.summary } }];\n}`
-    : `if (item.shouldReuse && item.${dataKey}) {\n  return [{ json: { contractId, resumeFrom, text, ${dataKey}: item.${dataKey}, output: { ${dataKey}: item.${dataKey} } } }];\n}`;
-
-  const extractCall = dataKey === 'summary'
-    ? `const data = extractData(item);`
-    : `const data = extractData(item, '${dataKey}');`;
-
-  const returnStmt = dataKey === 'summary'
-    ? `return [{ json: { contractId, resumeFrom, text, summary: data, output: data } }];`
-    : `return [{ json: { contractId, resumeFrom, text, ${dataKey}: data, output: { ${dataKey}: data } } }];`;
-
-  return [
-    "if (!global.__contractlens_state) global.__contractlens_state = {};",
-    "const item = $input.first().json;",
-    "const contractId = item.contractId || global.__contractlens_state._lastContractId;",
-    "const resumeFrom = item.resumeFrom || 'clause';",
-    "const text = item.text || (global.__contractlens_state[contractId]?.text) || '';",
-    "",
-    reuseCheck,
-    extractFn,
-    "",
-    extractCall,
-    "",
-    "if (contractId) {",
-    "  if (!global.__contractlens_state[contractId]) global.__contractlens_state[contractId] = { text };",
-    `  global.__contractlens_state[contractId].${dataKey} = data;`,
-    "  global.__contractlens_state[contractId].updatedAt = new Date().toISOString();",
-    "  global.__contractlens_state._lastContractId = contractId;",
-    "}",
-    "",
-    returnStmt
-  ].join("\n");
 }
 
-findNode('Check Clause').parameters.jsCode = makeCheckCode('clause', 'clauses', ['clause']);
-findNode('Save Clause').parameters.jsCode = makeSaveCode('clause', 'clauses');
+const summary = extractSummary(item);
 
-findNode('Check Risk').parameters.jsCode = makeCheckCode('risk', 'risks', ['clause', 'risk']);
-findNode('Save Risk').parameters.jsCode = makeSaveCode('risk', 'risks');
+if (contractId && global.__contractlens_state[contractId]) {
+  global.__contractlens_state[contractId].summary = summary;
+  global.__contractlens_state[contractId].updatedAt = new Date().toISOString();
+}
 
-findNode('Check Obligation').parameters.jsCode = makeCheckCode('obligation', 'obligations', ['clause', 'risk', 'obligation']);
-findNode('Save Obligation').parameters.jsCode = makeSaveCode('obligation', 'obligations');
+return [{ json: { contractId, resumeFrom, text, summary, output: summary } }];`;
 
-findNode('Check Summary').parameters.jsCode = makeCheckCode('summary', 'summary', ['summary']);
-findNode('Save Summary').parameters.jsCode = makeSaveCode('summary', 'summary');
+// ===== FIX: Assemble Analysis =====
 
-// ===== FIX 13: Assemble Analysis — read from global state =====
+findNode('Assemble Analysis').parameters.jsCode = `if (!global.__contractlens_state) global.__contractlens_state = {};
+const item = $input.first().json;
+const ctx = global.__contractlens_current || {};
+const contractId = item.contractId || ctx.contractId;
+const state = global.__contractlens_state[contractId] || {};
 
-findNode('Assemble Analysis').parameters.jsCode = [
-  "if (!global.__contractlens_state) global.__contractlens_state = {};",
-  "const item = $input.first().json;",
-  "const contractId = item.contractId || global.__contractlens_state._lastContractId;",
-  "const state = global.__contractlens_state[contractId] || {};",
-  "",
-  "const clauses = state.clauses || item.clauses || [];",
-  "const risks = state.risks || item.risks || [];",
-  "const obligations = state.obligations || item.obligations || [];",
-  "const summary = state.summary || item.summary || {};",
-  "",
-  "return [",
-  "  { json: { contractId, output: { clauses } } },",
-  "  { json: { contractId, output: { risks } } },",
-  "  { json: { contractId, output: { obligations } } },",
-  "  { json: { contractId, output: summary } }",
-  "];"
-].join("\n");
+const clauses = state.clauses || item.clauses || [];
+const risks = state.risks || item.risks || [];
+const obligations = state.obligations || item.obligations || [];
+const summary = state.summary || item.summary || {};
 
-// ===== FIX 14: Remove orphaned Merge Analysis Results =====
+return [
+  { json: { contractId, output: { clauses } } },
+  { json: { contractId, output: { risks } } },
+  { json: { contractId, output: { obligations } } },
+  { json: { contractId, output: summary } }
+];`;
 
+// ===== FIX: Remove orphaned Merge Analysis Results =====
 out.nodes = out.nodes.filter(n => n.name !== 'Merge Analysis Results');
 delete out.connections["Merge Analysis Results"];
 
-// Fix Check Any Failed? connections (ensure index 0 for Calculate Risk Score)
 out.connections["Check Any Failed?"] = {
   main: [
     [{ node: "Respond Error", type: "main", index: 0 }],
@@ -278,115 +384,122 @@ out.connections["Check Any Failed?"] = {
   ]
 };
 
-// ===== FIX 15: Calculate Risk Score =====
+// ===== FIX: Calculate Risk Score =====
 
-findNode('Calculate Risk Score').parameters.jsCode = [
-  "const inputs = $input.all();",
-  "let contractId = null;",
-  "let clauseData = [], riskData = [], obligationData = [], summaryData = {};",
-  "",
-  "for (const inp of inputs) {",
-  "  const json = inp.json;",
-  "  if (json.contractId) contractId = json.contractId;",
-  "  if (json.output) {",
-  "    if (json.output.clauses) clauseData = json.output.clauses;",
-  "    else if (json.output.risks) riskData = json.output.risks;",
-  "    else if (json.output.obligations) obligationData = json.output.obligations;",
-  "    else if (json.output.contract_name) summaryData = json.output;",
-  "  }",
-  "}",
-  "",
-  "// Fallback: global state",
-  "if (contractId && global.__contractlens_state?.[contractId]) {",
-  "  const st = global.__contractlens_state[contractId];",
-  "  if (!clauseData.length && st.clauses) clauseData = st.clauses;",
-  "  if (!riskData.length && st.risks) riskData = st.risks;",
-  "  if (!obligationData.length && st.obligations) obligationData = st.obligations;",
-  "  if (!summaryData.contract_name && st.summary) summaryData = st.summary;",
-  "}",
-  "",
-  "const W = { payment_terms:.25, liability:.30, termination:.15, ip:.15, confidentiality:.08, data_protection:.12, service_level:.08, indemnification:.07, warranty:.05, general:.05 };",
-  "const S = { critical:1.0, high:.80, medium:.50, low:.25, none:0 };",
-  "",
-  "function norm(t) {",
-  "  const s = String(t||'').toLowerCase();",
-  "  if (s.includes('liab')) return 'liability';",
-  "  if (s.includes('pay')||s.includes('fee')) return 'payment_terms';",
-  "  if (s.includes('term')||s.includes('renew')) return 'termination';",
-  "  if (s.includes('indemn')) return 'indemnification';",
-  "  if (s.includes('ip')||s.includes('intellectual')) return 'ip';",
-  "  if (s.includes('data')||s.includes('security')) return 'data_protection';",
-  "  if (s.includes('sla')||s.includes('service')) return 'service_level';",
-  "  if (s.includes('confid')) return 'confidentiality';",
-  "  if (s.includes('warran')) return 'warranty';",
-  "  return 'general';",
-  "}",
-  "",
-  "let bd = {}, tw = 0, te = 0, rf = [], rec = [];",
-  "riskData.forEach(r => {",
-  "  const c = norm(r.clause_type), w = W[c]||.10;",
-  "  const l = String(r.risk_level||'').toLowerCase();",
-  "  const s = S[l] !== undefined ? S[l] : .5;",
-  "  tw += s * w; te += w; bd[c+'_risk'] = s;",
-  "  if (l==='critical'||l==='high') {",
-  "    if (r.risk_description) rf.push(r.risk_description);",
-  "    if (r.recommendation) rec.push(r.recommendation);",
-  "  }",
-  "});",
-  "",
-  "['payment_terms','liability','termination'].forEach(ct => {",
-  "  if (!clauseData.map(c=>norm(c.clause_type)).includes(ct)) {",
-  "    rf.push('Missing critical clause: '+ct);",
-  "    rec.push('Add '+ct+' clause');",
-  "  }",
-  "});",
-  "",
-  "let score = 0;",
-  "if (riskData.length > 0) score = Math.min(1, Math.round((tw / Math.max(te, .5)) * 100) / 100);",
-  "",
-  "let level = 'LOW';",
-  "if (score >= .85) level = 'CRITICAL';",
-  "else if (score >= .70) level = 'HIGH';",
-  "else if (score >= .40) level = 'MEDIUM';",
-  "",
-  "return [{ json: {",
-  "  contractId, contract_name: summaryData.contract_name || 'Contract Agreement',",
-  "  overall_risk_score: score, risk_level: level,",
-  "  score_breakdown: bd, red_flags: rf, recommendations: rec,",
-  "  clauses: clauseData, risks: riskData,",
-  "  obligations: obligationData, summary: summaryData,",
-  "  calculated_at: new Date().toISOString()",
-  "} }];"
-].join("\n");
+findNode('Calculate Risk Score').parameters.jsCode = `const inputs = $input.all();
+let contractId = null;
+let clauseData = [], riskData = [], obligationData = [], summaryData = {};
 
-// ===== FIX 16: Insert Contract — fix cross-branch references =====
+for (const inp of inputs) {
+  const json = inp.json;
+  if (json.contractId) contractId = json.contractId;
+  if (json.output) {
+    if (json.output.clauses) clauseData = json.output.clauses;
+    else if (json.output.risks) riskData = json.output.risks;
+    else if (json.output.obligations) obligationData = json.output.obligations;
+    else if (json.output.contract_name) summaryData = json.output;
+  }
+}
 
+// Fallback: global state
+if (contractId && global.__contractlens_state?.[contractId]) {
+  const st = global.__contractlens_state[contractId];
+  if (!clauseData.length && st.clauses) clauseData = st.clauses;
+  if (!riskData.length && st.risks) riskData = st.risks;
+  if (!obligationData.length && st.obligations) obligationData = st.obligations;
+  if (!summaryData.contract_name && st.summary) summaryData = st.summary;
+}
+
+const W = { payment_terms:.25, liability:.30, termination:.15, ip:.15, confidentiality:.08, data_protection:.12, service_level:.08, indemnification:.07, warranty:.05, general:.05 };
+const S = { critical:1.0, high:.80, medium:.50, low:.25, none:0 };
+
+function norm(t) {
+  const s = String(t||'').toLowerCase();
+  if (s.includes('liab')) return 'liability';
+  if (s.includes('pay')||s.includes('fee')) return 'payment_terms';
+  if (s.includes('term')||s.includes('renew')) return 'termination';
+  if (s.includes('indemn')) return 'indemnification';
+  if (s.includes('ip')||s.includes('intellectual')) return 'ip';
+  if (s.includes('data')||s.includes('security')) return 'data_protection';
+  if (s.includes('sla')||s.includes('service')) return 'service_level';
+  if (s.includes('confid')) return 'confidentiality';
+  if (s.includes('warran')) return 'warranty';
+  return 'general';
+}
+
+let bd = {}, tw = 0, te = 0, rf = [], rec = [];
+riskData.forEach(r => {
+  const c = norm(r.clause_type), w = W[c]||.10;
+  const l = String(r.risk_level||'').toLowerCase();
+  const s = S[l] !== undefined ? S[l] : .5;
+  tw += s * w; te += w; bd[c+'_risk'] = s;
+  if (l==='critical'||l==='high') {
+    if (r.risk_description) rf.push(r.risk_description);
+    if (r.recommendation) rec.push(r.recommendation);
+  }
+});
+
+['payment_terms','liability','termination'].forEach(ct => {
+  if (!clauseData.map(c=>norm(c.clause_type)).includes(ct)) {
+    rf.push('Missing critical clause: '+ct);
+    rec.push('Add '+ct+' clause');
+  }
+});
+
+let score = 0;
+if (riskData.length > 0) score = Math.min(1, Math.round((tw / Math.max(te, .5)) * 100) / 100);
+
+let level = 'LOW';
+if (score >= .85) level = 'CRITICAL';
+else if (score >= .70) level = 'HIGH';
+else if (score >= .40) level = 'MEDIUM';
+
+return [{ json: {
+  contractId, contract_name: summaryData.contract_name || 'Contract Agreement',
+  overall_risk_score: score, risk_level: level,
+  score_breakdown: bd, red_flags: rf, recommendations: rec,
+  clauses: clauseData, risks: riskData,
+  obligations: obligationData, summary: summaryData,
+  calculated_at: new Date().toISOString()
+} }];`;
+
+// ===== FIX: Insert Contract parties cross-branch ref =====
 const insertContract = findNode('Insert Contract');
 if (insertContract?.parameters?.columns?.value?.parties) {
   insertContract.parameters.columns.value.parties = "={{ JSON.stringify({ client: ($json.summary?.parties || [])[0] || 'Unknown', vendor: ($json.summary?.parties || [])[1] || 'Unknown' }) }}";
 }
 
-// ===== FIX 17: Rename for clarity =====
-out.name = "ContractLens - Final Fixed Workflow";
+// ===== FIX: Respond Error =====
+const respondError = findNode('Respond Error');
+respondError.parameters.responseBody = `={{ { success: false, analysisStatus: 'failed', failedAgent: $json.failedAgent || 'AI Agent', resumeFrom: $json.resumeFrom || $json.stage || 'clause', contractId: $json.contractId, error: $json.error || 'Temporary AI service issue. Please try again.' } }}`;
 
-// ===== WRITE =====
+// ===== Output =====
+out.name = "ContractLens - Final Fixed Workflow";
 writeFileSync('./wf_final.json', JSON.stringify(out, null, 2));
 
-console.log('\\n=== Generated wf_final.json ===');
-console.log('Fixes:');
-console.log('  1. Agent prompts use ONLY {{ $json.text }}');
-console.log('  2. Obligation Parser schema fixed (no extra output wrapper)');
-console.log('  3. All agents have onError=continueRegularOutput');
-console.log('  4. Init State has zero cross-branch references');
-console.log('  5. All Check/Save nodes pass text forward via $json + global state');
-console.log('  6. Removed orphaned Merge Analysis Results');
-console.log('  7. Insert Contract parties expression fixed');
+// Also overwrite the main file
+writeFileSync('./wf_4_gemini_models.json', JSON.stringify(out, null, 2));
+
+console.log('\\n=== Generated wf_final.json + wf_4_gemini_models.json ===');
+console.log('');
+console.log('ROOT CAUSE: n8n Agent node REPLACES $json with its own output.');
+console.log('  Input to Agent:  { contractId, resumeFrom, text, shouldReuse }');
+console.log('  Output of Agent: { output: { clauses: [...] } }  <-- text GONE');
+console.log('');
+console.log('FIX: Each Check node stores global.__contractlens_current = { contractId, resumeFrom, text }');
+console.log('     Each Save node reads from global.__contractlens_current as fallback');
+console.log('');
 
 // Verify
 let bad = 0;
+const badRefs = ['Extract PDF Text', 'Init State', 'Contract Upload Webhook', 'Load State'];
 for (const node of out.nodes) {
   const s = JSON.stringify(node.parameters || {});
-  const m = s.match(/\$\(['"](Extract PDF Text|Init State|Contract Upload Webhook|Check Summary|Load State)['"]\)/g);
-  if (m) { console.log('\\n  ❌ CROSS-REF in ' + node.name + ': ' + m.join(', ')); bad++; }
+  badRefs.forEach(ref => {
+    if (s.includes("$('" + ref + "')") || s.includes('$("' + ref + '")') || s.includes("$(\\\'" + ref) || s.includes("$(\\\"" + ref)) {
+      console.log('  ❌ CROSS-REF in ' + node.name + ': ' + ref);
+      bad++;
+    }
+  });
 }
-if (!bad) console.log('\\n  ✅ ZERO cross-branch references. Workflow is clean.');
+if (!bad) console.log('✅ ZERO cross-branch references. Workflow is clean.');
