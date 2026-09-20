@@ -88,3 +88,19 @@ a, button {
   outline: 2px solid #000000;
   outline-offset: 2px;
 }
+
+/* ── Editorial Menu Marquee Animation ──────────────── */
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 7s linear infinite;
+}
