@@ -36,19 +36,6 @@ export const AboutUs: React.FC = () => {
           </div>
 
           <div className="flex items-center h-full">
-            <Link
-              to="/"
-              className="hidden sm:inline-flex items-center text-[11px] tracking-[0.18em] uppercase text-neutral-500 hover:text-black transition-colors px-6"
-            >
-              HOME
-            </Link>
-            <button
-              onClick={handleStartUsing}
-              className="hidden md:inline-flex items-center text-[11px] tracking-[0.16em] uppercase px-6 h-full border-l border-black bg-black text-white hover:bg-[#D3FD50] hover:text-black transition-colors cursor-pointer"
-            >
-              START USING →
-            </button>
-
             {/* Menu Trigger */}
             <div className="relative h-full border-l border-black">
               <MenuButton onClick={() => setMenuOpen(true)} />

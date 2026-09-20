@@ -63,13 +63,6 @@ export const Register: React.FC = () => {
             </Link>
           </div>
           <div className="flex items-center h-full">
-            <Link
-              to="/about"
-              className="hidden sm:inline-flex items-center text-[11px] tracking-[0.18em] uppercase text-neutral-500 hover:text-black transition-colors px-6"
-            >
-              ABOUT US
-            </Link>
-
             {/* Menu Trigger */}
             <div className="relative h-full border-l border-black">
               <MenuButton onClick={() => setMenuOpen(true)} />
