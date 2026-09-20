@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { FullscreenMenu } from '../components/LandingPage/FullscreenMenu';
+import { MenuButton } from '../components/LandingPage/MenuButton';
 
 export const Register: React.FC = () => {
   const { register } = useAuth();
@@ -13,6 +15,7 @@ export const Register: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Destination after successful register
   const from = (location.state as any)?.from?.pathname || '/dashboard';
@@ -45,22 +48,32 @@ export const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white text-black font-lausanne selection:bg-[#D3FD50] selection:text-black flex flex-col justify-between">
+      {/* ── Fullscreen Editorial Menu ──────────────────────── */}
+      <FullscreenMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
+
       {/* ── Top Bar ────────────────────────────────────────── */}
-      <header className="border-b border-black">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 h-16 flex items-center justify-between">
-          <Link
-            to="/"
-            className="text-xs font-medium tracking-[0.25em] uppercase hover:opacity-70 transition-opacity"
-          >
-            CONTRACTLENS
-          </Link>
-          <div className="flex items-center gap-6">
+      <header className="border-b border-black h-[48px] md:h-[52px]">
+        <div className="w-full h-full flex items-center justify-between">
+          <div className="pl-6 lg:pl-12">
+            <Link
+              to="/"
+              className="text-xs font-semibold tracking-[0.25em] uppercase hover:opacity-70 transition-opacity"
+            >
+              CONTRACTLENS
+            </Link>
+          </div>
+          <div className="flex items-center h-full">
             <Link
               to="/about"
-              className="text-[11px] tracking-[0.18em] uppercase text-neutral-500 hover:text-black transition-colors"
+              className="hidden sm:inline-flex items-center text-[11px] tracking-[0.18em] uppercase text-neutral-500 hover:text-black transition-colors px-6"
             >
               ABOUT US
             </Link>
+
+            {/* Menu Trigger */}
+            <div className="relative h-full border-l border-black">
+              <MenuButton onClick={() => setMenuOpen(true)} />
+            </div>
           </div>
         </div>
       </header>

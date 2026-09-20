@@ -65,7 +65,7 @@ export const FullscreenMenu: React.FC<FullscreenMenuProps> = ({ isOpen, onClose 
       label: 'CONNECT WITH ME',
       marqueeText: '✦ GET IN TOUCH ✦ SAY HELLO ✦ PARTNERSHIPS & COLLABORATION',
       action: () => {
-        window.open('https://github.com', '_blank');
+        window.open('https://www.linkedin.com/in/achyut-pandey-122a87323', '_blank');
       }
     }
   ];
@@ -94,7 +94,7 @@ export const FullscreenMenu: React.FC<FullscreenMenuProps> = ({ isOpen, onClose 
       label: 'CONNECT WITH ME',
       marqueeText: '✦ GET IN TOUCH ✦ SAY HELLO ✦ PARTNERSHIPS & COLLABORATION',
       action: () => {
-        window.open('https://github.com', '_blank');
+        window.open('https://www.linkedin.com/in/achyut-pandey-122a87323', '_blank');
       }
     },
     {

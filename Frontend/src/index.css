@@ -102,5 +102,5 @@ a, button {
 .animate-marquee {
   display: flex;
   width: max-content;
-  animation: marquee 7s linear infinite;
+  animation: marquee 18s linear infinite;
 }
