@@ -1,17 +1,16 @@
-import { Menu } from "lucide-react";
-
 interface MenuButtonProps {
-  onClick: () => void;
+  onClick?: () => void;
 }
 
 export const MenuButton: React.FC<MenuButtonProps> = ({ onClick }) => {
   return (
     <button
       onClick={onClick}
-      className="fixed top-6 right-6 z-50 w-[20vw] h-[8vh] min-w-[60px] min-h-[48px] max-w-[120px] max-h-[80px] bg-[#000] rounded-lg flex items-center justify-center transition-colors hover:bg-[#111] focus:outline-none focus:ring-2 focus:ring-[#D3FD50] focus:ring-offset-2 focus:ring-offset-[#000]"
+      className="fixed top-0 right-0 z-50 w-[28vw] min-w-[140px] max-w-[240px] h-[48px] md:h-[52px] bg-[#D3FD50] flex flex-col justify-center items-end pr-7 md:pr-8 gap-1.5 cursor-pointer rounded-none transition-colors hover:bg-[#c4ed42] focus:outline-none group"
       aria-label="Open menu"
     >
-      <Menu className="w-8 h-8 text-[#fff]" strokeWidth={2.5} />
+      <span className="w-12 h-[2px] bg-black block transition-all duration-200" />
+      <span className="w-6 h-[2px] bg-black block transition-all duration-200 group-hover:w-12" />
     </button>
   );
 };
