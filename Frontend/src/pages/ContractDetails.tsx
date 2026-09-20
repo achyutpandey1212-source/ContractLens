@@ -1,8 +1,8 @@
-﻿import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, Loader2, AlertCircle } from 'lucide-react';
-import { Button } from '../components/Button';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { RiskBadge } from '../components/RiskBadge';
+import { Tabs, TabItem } from '../components/Tabs';
 import { api, ContractDetail } from '../services/api';
 import { RiskLevel } from '../data/mockData';
 
@@ -12,9 +12,9 @@ export const ContractDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('risks');
-  const [contract, setContract] = useState<ContractDetail | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [contract, setContract]   = useState<ContractDetail | null>(null);
+  const [loading, setLoading]     = useState<boolean>(true);
+  const [error, setError]         = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -22,229 +22,266 @@ export const ContractDetails: React.FC = () => {
     setLoading(true);
     api
       .getContractById(id)
-      .then((data) => {
-        if (isMounted) {
-          setContract(data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setError('Failed to load contract.');
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
+      .then((data) => { if (isMounted) { setContract(data); setLoading(false); } })
+      .catch(() => { if (isMounted) { setError('Failed to load contract.'); setLoading(false); } });
+    return () => { isMounted = false; };
   }, [id]);
 
-  const handleTabClick = (tab: Tab) => {
+  /* Obligations tab navigates to its own route — same as original */
+  const handleTabChange = (tab: string) => {
     if (tab === 'obligations') {
-      navigate('/contracts/' + id + '/obligations');
+      navigate(`/contracts/${id}/obligations`);
     } else {
-      setActiveTab(tab);
+      setActiveTab(tab as Tab);
     }
   };
 
   const normalizeRiskLevel = (lvl?: string): RiskLevel => {
-    const upper = (lvl || '').toUpperCase();
-    if (upper === 'CRITICAL') return 'CRITICAL';
-    if (upper === 'HIGH') return 'HIGH';
-    if (upper === 'MEDIUM') return 'MEDIUM';
+    const u = (lvl ?? '').toUpperCase();
+    if (u === 'CRITICAL') return 'CRITICAL';
+    if (u === 'HIGH')     return 'HIGH';
+    if (u === 'MEDIUM')   return 'MEDIUM';
     return 'LOW';
   };
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      });
+    } catch { return dateStr; }
+  };
+
+  /* ── Loading ──────────────────────────────────────── */
   if (loading) {
     return (
-      <div className="p-12 flex items-center justify-center gap-2 text-neutral-500 text-sm">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span>Loading contract...</span>
+      <div className="max-w-7xl mx-auto px-6 lg:px-12 py-20 flex items-center gap-3 text-neutral-400">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-[11px] tracking-[0.2em] uppercase animate-pulse">
+          LOADING CONTRACT...
+        </span>
       </div>
     );
   }
 
+  /* ── Error ────────────────────────────────────────── */
   if (error || !contract) {
     return (
-      <div className="space-y-4">
-        <Button to="/" variant="outline" className="gap-2 text-xs py-1.5 px-3">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back</span>
-        </Button>
-        <div className="p-8 bg-white rounded-xl border border-rose-200 flex items-center gap-2 text-rose-700 text-sm">
-          <AlertCircle className="w-5 h-5" />
-          <span>{error || 'Failed to load contract.'}</span>
+      <div className="max-w-7xl mx-auto px-6 lg:px-12 py-16 space-y-8">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] uppercase text-neutral-500 hover:text-black transition-colors"
+        >
+          ← DASHBOARD
+        </Link>
+        <div className="border border-black p-8">
+          <p className="text-[10px] tracking-[0.2em] uppercase text-neutral-500 mb-2">ERROR</p>
+          <p className="text-base font-medium text-black">{error ?? 'Failed to load contract.'}</p>
         </div>
       </div>
     );
   }
 
-  const risks = contract.risks || [];
+  /* ── Derived values ─────────────────────────────── */
+  const risks      = contract.risks ?? [];
+  const riskLevel  = normalizeRiskLevel(contract.riskLevel);
   const overviewSummary =
-    contract.summary?.overall_assessment ||
-    contract.summary?.major_obligations ||
-    contract.summary?.key_terms ||
+    contract.summary?.overall_assessment ??
+    contract.summary?.major_obligations ??
+    contract.summary?.key_terms ??
     'Contract analysis overview generated by AI.';
 
+  const partyLine =
+    contract.client && contract.vendor
+      ? `${contract.client} × ${contract.vendor}`
+      : contract.client ?? contract.vendor ?? '';
+
+  const tabItems: TabItem[] = [
+    { id: 'overview',     label: 'OVERVIEW'                },
+    { id: 'risks',        label: 'RISKS', count: risks.length },
+    { id: 'obligations',  label: 'OBLIGATIONS'             },
+  ];
+
+  /* ── Render ─────────────────────────────────────── */
   return (
-    <div className="space-y-6">
-      <div>
-        <Button to="/" variant="outline" className="gap-2 mb-4 text-xs py-1.5 px-3">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back</span>
-        </Button>
+    <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 md:py-16">
 
-        <div className="bg-white rounded-xl border border-neutral-200 p-6 shadow-xs space-y-6">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900">
-                {contract.name}
-              </h1>
-              <p className="text-xs text-neutral-500 mt-1 font-mono">Contract ID: {id}</p>
-            </div>
+      {/* Back */}
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] uppercase text-neutral-500 hover:text-black transition-colors mb-8"
+      >
+        ← DASHBOARD
+      </Link>
 
-            <div className="flex items-center gap-4 bg-neutral-50 border border-neutral-200 rounded-lg p-3 self-start">
-              <div>
-                <p className="text-xs text-neutral-500 font-medium uppercase">Risk Score</p>
-                <p className="text-2xl font-bold text-neutral-900">{contract.riskScore}%</p>
-              </div>
-              <div className="h-8 w-px bg-neutral-200" />
-              <div>
-                <p className="text-xs text-neutral-500 font-medium uppercase mb-1">Risk Level</p>
-                <RiskBadge level={normalizeRiskLevel(contract.riskLevel)} />
-              </div>
-            </div>
+      {/* ── Contract Header ────────────────────────── */}
+      {partyLine && (
+        <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-500 mb-2">
+          {partyLine}
+        </p>
+      )}
+      <h1 className="text-3xl md:text-4xl lg:text-5xl font-medium tracking-tight leading-tight text-black mb-2">
+        {contract.name.toUpperCase()}
+      </h1>
+      {contract.contractType && (
+        <p className="text-sm text-neutral-500 mb-8">{contract.contractType}</p>
+      )}
+
+      <hr className="border-black mb-8" />
+
+      {/* ── Risk Score + Metadata ──────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+
+        {/* Risk score block */}
+        <div className="flex items-end gap-5">
+          <div>
+            <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-500 mb-2">
+              RISK SCORE
+            </p>
+            <p className="text-7xl md:text-8xl font-medium tabular-nums leading-none text-black">
+              {contract.riskScore}%
+            </p>
           </div>
-
-          <div className="border-t border-neutral-200 pt-4">
-            <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">
-              Parties
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200">
-                <p className="text-xs text-neutral-500 font-medium">Client</p>
-                <p className="text-sm font-semibold text-neutral-900 mt-0.5">
-                  {contract.client || 'N/A'}
-                </p>
-              </div>
-              <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200">
-                <p className="text-xs text-neutral-500 font-medium">Vendor</p>
-                <p className="text-sm font-semibold text-neutral-900 mt-0.5">
-                  {contract.vendor || 'N/A'}
-                </p>
-              </div>
-            </div>
+          <div className="mb-2">
+            <RiskBadge level={riskLevel} className="text-xs px-3 py-1" />
           </div>
+        </div>
+
+        {/* Metadata grid */}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+          {[
+            { label: 'CLIENT',    value: contract.client          ?? 'N/A' },
+            { label: 'VENDOR',    value: contract.vendor          ?? 'N/A' },
+            { label: 'EFFECTIVE', value: formatDate(contract.effectiveDate) },
+            { label: 'EXPIRES',   value: formatDate(contract.expirationDate) },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-0.5">
+                {label}
+              </p>
+              <p className="text-sm font-medium text-black leading-snug">{value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="flex border-b border-neutral-200 gap-2">
-        <button
-          onClick={() => handleTabClick('overview')}
-          className={
-            'px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ' +
-            (activeTab === 'overview'
-              ? 'border-neutral-900 text-neutral-900'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700')
-          }
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => handleTabClick('risks')}
-          className={
-            'px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ' +
-            (activeTab === 'risks'
-              ? 'border-neutral-900 text-neutral-900'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700')
-          }
-        >
-          Risks ({risks.length})
-        </button>
-        <button
-          onClick={() => handleTabClick('obligations')}
-          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-700 cursor-pointer"
-        >
-          Obligations
-        </button>
+      <hr className="border-neutral-200 mb-8" />
+
+      {/* ── Tabs ──────────────────────────────────── */}
+      <div className="mb-8">
+        <Tabs
+          tabs={tabItems}
+          active={activeTab}
+          onChange={handleTabChange}
+        />
       </div>
 
+      {/* ── Overview Tab ──────────────────────────── */}
       {activeTab === 'overview' && (
-        <div className="bg-white rounded-xl border border-neutral-200 p-6 space-y-4 shadow-xs">
-          <h3 className="text-base font-semibold text-neutral-900">Contract Overview</h3>
-          <p className="text-sm text-neutral-600 leading-relaxed">
-            {overviewSummary}
-          </p>
-          <div className="pt-4 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+        <div className="max-w-3xl space-y-8">
+          <div>
+            <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500 mb-5">
+              OVERVIEW
+            </h2>
+            <p className="text-base text-black leading-relaxed">{overviewSummary}</p>
+          </div>
+
+          <hr className="border-neutral-200" />
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
-              <p className="text-xs text-neutral-500 font-medium">Agreement Type</p>
-              <p className="font-medium text-neutral-800 mt-0.5">
-                {contract.contractType || contract.summary?.contract_type || 'Contract'}
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">TYPE</p>
+              <p className="text-sm font-medium text-black">
+                {contract.contractType ?? contract.summary?.contract_type ?? 'Contract'}
               </p>
             </div>
             <div>
-              <p className="text-xs text-neutral-500 font-medium">Original File</p>
-              <p className="font-medium text-neutral-800 mt-0.5">
-                {contract.originalFileName || 'Uploaded Document'}
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">DOCUMENT</p>
+              <p className="text-sm font-medium text-black">
+                {contract.originalFileName ?? 'Uploaded Document'}
               </p>
             </div>
             <div>
-              <p className="text-xs text-neutral-500 font-medium">Value</p>
-              <p className="font-medium text-neutral-800 mt-0.5">
-                {contract.value || contract.summary?.value || 'N/A'}
+              <p className="text-[10px] tracking-[0.22em] uppercase text-neutral-400 mb-1">VALUE</p>
+              <p className="text-sm font-medium text-black">
+                {contract.value ?? contract.summary?.value ?? 'N/A'}
               </p>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Risks Tab ─────────────────────────────── */}
       {activeTab === 'risks' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-neutral-900">Identified Risks & Recommendations</h3>
-            <span className="text-xs text-neutral-500">{risks.length} findings found</span>
+        <div>
+          <div className="flex items-baseline justify-between mb-8">
+            <h2 className="text-[11px] tracking-[0.22em] uppercase text-neutral-500">
+              RISK FINDINGS
+            </h2>
+            <span className="text-[10px] tracking-[0.14em] uppercase text-neutral-400">
+              {risks.length} FINDING{risks.length !== 1 ? 'S' : ''}
+            </span>
           </div>
 
           {risks.length === 0 ? (
-            <div className="p-8 bg-white rounded-xl border border-neutral-200 text-center text-neutral-500 text-sm">
-              No significant risks identified in this contract.
+            <div className="py-20 border border-dashed border-neutral-200 text-center">
+              <p className="text-[11px] tracking-[0.22em] uppercase text-neutral-400">
+                NO SIGNIFICANT RISKS IDENTIFIED.
+              </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {risks.map((finding, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white rounded-xl border border-neutral-200 p-5 shadow-xs space-y-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-neutral-500 shrink-0" />
-                      <h4 className="text-sm font-semibold text-neutral-900">
-                        {finding.clause_type ? finding.clause_type.replace(/_/g, ' ').toUpperCase() : `Risk Finding #${idx + 1}`}
-                      </h4>
+            <div>
+              {risks.map((finding, idx) => {
+                const level = normalizeRiskLevel(finding.risk_level);
+                return (
+                  <div key={idx}>
+                    <div className="py-8 grid grid-cols-12 gap-4 md:gap-8">
+                      {/* Index + Badge column */}
+                      <div className="col-span-12 md:col-span-3 flex items-start gap-4">
+                        <span className="text-[10px] tracking-[0.18em] text-neutral-400 tabular-nums mt-0.5 shrink-0">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <RiskBadge level={level} />
+                      </div>
+
+                      {/* Content column */}
+                      <div className="col-span-12 md:col-span-9 space-y-4">
+                        <h3
+                          className={`tracking-wide uppercase font-medium ${
+                            level === 'CRITICAL' ? 'text-base text-black' : 'text-sm text-black'
+                          }`}
+                        >
+                          {finding.clause_type
+                            ? finding.clause_type.replace(/_/g, ' ')
+                            : `Risk Finding #${idx + 1}`}
+                        </h3>
+
+                        {finding.risk_description && (
+                          <p className="text-sm text-neutral-700 leading-relaxed">
+                            {finding.risk_description}
+                          </p>
+                        )}
+
+                        {finding.recommendation && (
+                          <div className="border-l-2 border-black pl-4">
+                            <p className="text-[10px] tracking-[0.18em] uppercase text-neutral-500 mb-1">
+                              RECOMMENDATION
+                            </p>
+                            <p className="text-sm text-black leading-relaxed">
+                              {finding.recommendation}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <RiskBadge level={normalizeRiskLevel(finding.risk_level)} />
+
+                    {idx < risks.length - 1 && (
+                      <hr className="border-neutral-100" />
+                    )}
                   </div>
-
-                  {finding.risk_description && (
-                    <p className="text-sm text-neutral-700 bg-neutral-50 p-3 rounded-lg border border-neutral-200/70 font-mono text-xs leading-relaxed">
-                      "{finding.risk_description}"
-                    </p>
-                  )}
-
-                  {finding.recommendation && (
-                    <div className="pt-2">
-                      <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-                        Recommendation:
-                      </p>
-                      <p className="text-sm text-neutral-700 mt-1 leading-relaxed">
-                        {finding.recommendation}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

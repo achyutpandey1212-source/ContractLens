@@ -9,9 +9,9 @@ import { Obligations } from './pages/Obligations';
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <div className="min-h-screen flex flex-col bg-neutral-50 text-neutral-900">
+      <div className="min-h-screen flex flex-col bg-white text-black">
         <Header />
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8">
+        <main className="flex-1 w-full">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/upload" element={<UploadContract />} />
@@ -24,4 +24,5 @@ export const App: React.FC = () => {
     </BrowserRouter>
   );
 };
+
 export default App;

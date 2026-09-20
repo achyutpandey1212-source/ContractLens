@@ -7,26 +7,16 @@ interface RiskBadgeProps {
 }
 
 export const RiskBadge: React.FC<RiskBadgeProps> = ({ level, className = '' }) => {
-  const getBadgeStyles = (lvl: RiskLevel) => {
-    switch (lvl) {
-      case 'CRITICAL':
-        return 'bg-red-100 text-red-900 border-red-300 font-semibold';
-      case 'HIGH':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
-      case 'MEDIUM':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'LOW':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
+  const styles: Record<RiskLevel, string> = {
+    CRITICAL: 'bg-black text-white border-black',
+    HIGH:     'bg-white text-black border-black',
+    MEDIUM:   'bg-white text-neutral-600 border-neutral-400',
+    LOW:      'bg-white text-neutral-400 border-neutral-300',
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getBadgeStyles(
-        level
-      )} ${className}`}
+      className={`inline-flex items-center px-2.5 py-0.5 text-[10px] tracking-[0.14em] uppercase font-medium border ${styles[level]} ${className}`}
     >
       {level}
     </span>

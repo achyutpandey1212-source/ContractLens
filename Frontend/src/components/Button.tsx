@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: 'primary' | 'ghost' | 'outline' | 'link';
   to?: string;
 }
 
@@ -13,27 +13,32 @@ export const Button: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
-  const baseStyles =
-    'inline-flex items-center justify-center text-sm font-medium rounded-lg px-4 py-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
+  const base =
+    'inline-flex items-center justify-center gap-2 text-[11px] tracking-[0.14em] uppercase font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
 
-  const variants = {
-    primary: 'bg-neutral-900 text-white hover:bg-neutral-800 active:bg-neutral-950',
-    secondary: 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-200',
-    outline: 'bg-white text-neutral-700 border border-neutral-300 hover:bg-neutral-50',
+  const variants: Record<string, string> = {
+    primary:
+      'px-5 py-2.5 bg-black text-white hover:bg-[#D3FD50] hover:text-black',
+    ghost:
+      'px-5 py-2.5 border border-black text-black bg-white hover:bg-[#D3FD50] hover:border-[#D3FD50]',
+    // outline is aliased to ghost for backward compatibility
+    outline:
+      'px-5 py-2.5 border border-black text-black bg-white hover:bg-[#D3FD50] hover:border-[#D3FD50]',
+    link: 'text-black underline-offset-2 hover:underline px-0 py-0',
   };
 
-  const combinedClass = `${baseStyles} ${variants[variant]} ${className}`;
+  const combined = `${base} ${variants[variant] ?? variants.primary} ${className}`;
 
   if (to) {
     return (
-      <Link to={to} className={combinedClass}>
+      <Link to={to} className={combined}>
         {children}
       </Link>
     );
   }
 
   return (
-    <button className={combinedClass} {...props}>
+    <button className={combined} {...props}>
       {children}
     </button>
   );
