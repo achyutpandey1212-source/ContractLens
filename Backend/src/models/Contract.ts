@@ -1,4 +1,4 @@
-﻿import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document } from 'mongoose';
 
 export interface IClause {
   clause_type?: string;
@@ -61,6 +61,9 @@ export interface IContract extends Document {
   recommendations?: any[];
   status?: string;
   originalFileName?: string;
+  n8nContractId?: string;
+  failedAgent?: string;
+  resumeFrom?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -122,7 +125,10 @@ const ContractSchema = new Schema<IContract>(
     redFlags: { type: [Schema.Types.Mixed], default: [] },
     recommendations: { type: [Schema.Types.Mixed], default: [] },
     status: { type: String, default: 'analyzed' },
-    originalFileName: { type: String }
+    originalFileName: { type: String },
+    n8nContractId: { type: String },
+    failedAgent: { type: String },
+    resumeFrom: { type: String }
   },
   {
     timestamps: true,

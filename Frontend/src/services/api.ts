@@ -1,4 +1,4 @@
-﻿const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export interface ContractListItem {
   id: string;
@@ -48,6 +48,25 @@ export interface ContractDetail {
   updatedAt: string;
 }
 
+export interface RetryFailureResponse {
+  success: false;
+  analysisStatus: 'failed';
+  failedAgent: string;
+  resumeFrom: string;
+  contractId: string;
+  n8nContractId?: string;
+  error: string;
+}
+
+export class AnalysisError extends Error {
+  failureData?: RetryFailureResponse;
+  constructor(message: string, failureData?: RetryFailureResponse) {
+    super(message);
+    this.name = 'AnalysisError';
+    this.failureData = failureData;
+  }
+}
+
 export const api = {
   async getContracts(): Promise<ContractListItem[]> {
     const res = await fetch(`${API_BASE}/api/contracts`);
@@ -76,9 +95,31 @@ export const api = {
       body: formData
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 422 && data && data.analysisStatus === 'failed') {
+      throw new AnalysisError(data.error || 'The AI service temporarily ran into a problem.', data);
+    }
+
     if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Contract analysis failed. Please try again.');
+      throw new AnalysisError(data.error || 'Contract analysis failed. Please try again.');
+    }
+    return data;
+  },
+
+  async retryContract(contractId: string, agent?: string): Promise<{ success: boolean; contract: ContractDetail }> {
+    const res = await fetch(`${API_BASE}/api/contracts/${contractId}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 422 && data && data.analysisStatus === 'failed') {
+      throw new AnalysisError(data.error || 'The AI service temporarily ran into a problem.', data);
+    }
+
+    if (!res.ok || !data.success) {
+      throw new AnalysisError(data.error || 'Contract retry failed. Please try again.');
     }
     return data;
   }
